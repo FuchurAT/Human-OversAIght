@@ -28,7 +28,7 @@ class DetectionVisualizer:
         # Orange: (0, 165, 255), Yellow: (0, 255, 255) in BGR
         # Interpolate green channel from 165 (orange) to 255 (yellow)
         b = 255
-        g = int(165 + (255 - 105) * conf)
+        g = int(165 + (255 - 165) * conf)
         r = 0
         return (r, g, b)
 

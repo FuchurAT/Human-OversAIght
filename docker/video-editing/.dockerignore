@@ -1,0 +1,13 @@
+data/raw/*
+models/*
+.git
+.ipynb_checkpoints
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv

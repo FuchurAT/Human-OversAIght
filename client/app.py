@@ -2,7 +2,7 @@ import os
 import sys
 from utils.screen.screen import ScreenConfig, ScreenManager
 from utils.log import Log
-from apps.image_generator import ImageGenerator
+from apps.object_detection_app import ObjectDetectionApp
 
 app_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -17,46 +17,23 @@ def init():
 def createScreens():
     # Create screen configurations
     screens_config = [
-        # ScreenConfig(
-        #     screen_id=0,
-        #     name="Video",
-        #     inputs=[os.path.join(app_dir, "..", "data", "videos", "shibuya.mp4")]
-        # ),
-        # ScreenConfig(
-        #     screen_id=0,
-        #     name="Video",
-        #     inputs=[os.path.join(app_dir, "..", "..", "data", "images", "plane.jpg"), os.path.join(app_dir, "..", "..", "data", "images", "pear.jpg")]
-        # ),
-        # ScreenConfig(
-        #     screen_id=1,
-        #     name="Video",
-        #     grid_layout=(1, 2),
-        #     screen_size=(256, 256),
-        #     inputs=[["This is a text message", "Another text message"], os.path.join(app_dir, "..", "data", "images", "pear.jpg")]
-        # ),
-        # ScreenConfig(
-        #     screen_id=1,
-        #     name="Stable Diffusion 3.5",
-        #     inputs=ImageGenerator,
-        #     grid_layout=(1, 2),
-        #     focus_border="blue",
-        #     screen_size=(256, 256)
-        # )
-        # ScreenConfig(
-        #     screen_id=0,
-        #     name="Stable Diffusion 3.5",
-        #     inputs=ImageGenerator,
-        #     grid_layout=(1, 2),
-        #     focus_border="blue",
-        #     screen_size=(512, 512)
-        # ),
+        # Placeholder screen for testing
         ScreenConfig(
             screen_id=0,
-            name="Stable Diffusion 3.5",
-            inputs=ImageGenerator,
-            grid_layout=(1, 2),
+            name="Welcome",
+            inputs=["E:/Projects/human-oversaight/client/apps/object-detection/videos/us_capitol.mp4"],
+            grid_layout=(1, 1),
             focus_border="blue",
-            screen_size=(512, 512)
+            screen_size=(800, 600)
+        ),
+        # Object Detection screen
+        ScreenConfig(
+            screen_id=1,
+            name="Object Detection",
+            inputs=ObjectDetectionApp,
+            grid_layout=(1, 1),
+            focus_border="red",
+            screen_size=(800, 600)
         ),
   
     ]

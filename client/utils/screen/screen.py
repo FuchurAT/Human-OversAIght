@@ -95,9 +95,13 @@ class Screen(QMainWindow):
         else:
             super().__init__(None, Qt.Window | Qt.FramelessWindowHint)
             
+        # Set focus policy to capture keyboard events
+        self.setFocusPolicy(Qt.StrongFocus)
+            
         self.screen_id = screen_id
         self.name = name
         self.inputs = []
+        self.application_instances = []  # Store application instances separately
         self.running = False
         self.grid_layout = (1, 1)  # Default single input layout
         self.border_width = 5
@@ -187,6 +191,7 @@ class Screen(QMainWindow):
         else:
             # Create application instance
             application = input_source(self)
+            self.application_instances.append(application)  # Store the application instance
             self.inputs.extend(application.input())
 
         # Calculate grid layout if not explicitly set
@@ -203,6 +208,9 @@ class Screen(QMainWindow):
     def _show_window(self):
         """Thread-safe show operation"""
         self.show()
+        if self.focused:
+            self.setFocus()
+            self.activateWindow()
 
     def _close_window(self):
         """Thread-safe close operation"""
@@ -210,6 +218,13 @@ class Screen(QMainWindow):
             player.stop()
         self.media_players.clear()
         self.labels.clear()
+        
+        # Stop application instances
+        for app_instance in self.application_instances:
+            if hasattr(app_instance, 'stop'):
+                app_instance.stop()
+        self.application_instances.clear()
+        
         super().close()
 
     def _create_display_widgets(self):
@@ -364,6 +379,8 @@ class Screen(QMainWindow):
 
     def keyPressEvent(self, event):
         """Handle key press events"""
+        Log.info(f"Key pressed on screen {self.screen_id}: {event.key()} (focused: {self.focused})")
+        
         if event.key() == Qt.Key_Escape:
             # Emit signal to handle escape in main thread
             self.signals.escape_pressed_signal.emit()
@@ -375,6 +392,17 @@ class Screen(QMainWindow):
             # Focus next screen
             if self.manager:
                 self.manager.focus_next()
+        else:
+            # Forward other key events to application instances only if this screen is focused
+            if self.focused:
+                Log.info(f"Forwarding key {event.key()} to application instances")
+                for input_source in self.application_instances:
+                    if hasattr(input_source, 'handle_key_press'):
+                        input_source.handle_key_press(event.key())
+                    elif hasattr(input_source, 'app_instance') and hasattr(input_source.app_instance, 'handle_key_press'):
+                        input_source.app_instance.handle_key_press(event.key())
+            else:
+                Log.info(f"Screen {self.screen_id} not focused, ignoring key {event.key()}")
         # elif event.key() == Qt.Key_Tab:
         #     self.focusNextChild()
         # super().keyPressEvent(event)
@@ -382,6 +410,7 @@ class Screen(QMainWindow):
     def focusInEvent(self, event):
         """Handle focus in event"""
         self.focused = True
+        Log.info(f"Screen {self.screen_id} gained focus")
 
         if self.show_focus:
             self.setStyleSheet(
@@ -391,6 +420,7 @@ class Screen(QMainWindow):
     def focusOutEvent(self, event):
         """Handle focus out event"""
         self.focused = False
+        Log.info(f"Screen {self.screen_id} lost focus")
 
         if self.show_focus:
             self.setStyleSheet(f"QMainWindow {{ {self.baseStyle} }}")
@@ -430,6 +460,9 @@ class Screen(QMainWindow):
         """Handle focus change signal"""
         if screen_id == self.screen_id:
             self.setFocus()
+            self.activateWindow()
+            self.raise_()
+            Log.info(f"Screen {self.screen_id} focused and activated")
         else:
             self.clearFocus()
 

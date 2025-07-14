@@ -1,0 +1,64 @@
+name: video-editing
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip
+  - pillow
+  - ffmpeg
+  - git
+  
+  # CUDA toolkit
+  - nvidia::cuda-toolkit=12.1
+  - nvidia::cuda-runtime=12.1
+  
+  # Additional dependencies
+  - scipy
+  - matplotlib
+  - jupyter
+  - ipython
+  - tqdm
+  - requests
+  - typing-extensions
+  - pyyaml
+  
+  - pip:
+    - diffusers>=0.24.0
+    - transformers>=4.35.0
+    - accelerate>=0.24.0
+    - huggingface_hub>=0.17.0
+    - tokenizers>=0.14.0
+    - fastapi
+    - fastapi[standard]
+    - uvicorn>=0.24.0
+    - pydantic>=2.0.0
+    - python-multipart>=0.0.6
+    - ultralytics>=8.0.0
+    - segment-anything>=1.0.0
+    - opencv-python>=4.8.0
+    - imageio>=2.31.0
+    - imageio-ffmpeg>=0.4.9
+    - moviepy>=1.0.3
+    - Pillow>=10.0.0
+    - scikit-image>=0.21.0
+    - safetensors>=0.4.0
+    - omegaconf>=2.3.0
+    - wandb>=0.16.0
+    - tensorboard>=2.14.0
+    - einops>=0.7.0
+    - xformers==0.0.23
+    - numpy==1.23.5
+    
+    # Optional: for better performance on Linux
+    # - triton>=2.1.0
+    # - flash-attn>=2.3.0
+    
+variables:
+  CUDA_HOME: $CONDA_PREFIX
+  CUDA_VISIBLE_DEVICES: "0"
+  TORCH_CUDA_ARCH_LIST: "8.9"  # RTX 5090 architecture
+  PYTORCH_CUDA_ALLOC_CONF: "max_split_size_mb:128"

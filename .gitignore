@@ -3,3 +3,8 @@
 temp_frame.jpg
 **/__pycache__
 **/object-detection/videos
+**/output
+.env
+**/data
+**.pt
+**.pth
