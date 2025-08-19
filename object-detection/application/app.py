@@ -167,24 +167,52 @@ class VideoInferenceApp:
     
     def _apply_gradcam_overlay(self, frame: np.ndarray, detections: List[Detection], 
                                gradcam_img: np.ndarray) -> np.ndarray:
-        """Apply Grad-CAM overlay to the frame"""
-        if self.display_config.gradcam_in_box_only:
+        """Apply Grad-CAM overlay to the frame with improved synchronization"""
+        if gradcam_img is None or frame is None:
+            return frame
+        
+        # Ensure both images have the same dimensions
+        if gradcam_img.shape != frame.shape:
+            logging.warning(f"GradCAM shape mismatch: frame {frame.shape} vs gradcam {gradcam_img.shape}")
+            # Resize GradCAM to match frame
+            gradcam_img = cv2.resize(gradcam_img, (frame.shape[1], frame.shape[0]))
+        
+        if self.display_config.gradcam_in_box_only and detections:
             # Overlay Grad-CAM only inside boxes
             for detection in detections:
-                x1, y1, x2, y2 = detection.box
-                alpha = DEFAULT_GRADCAM_ALPHA
-                roi = frame[y1:y2, x1:x2]
-                grad_roi = gradcam_img[y1:y2, x1:x2]
-                if roi.shape == grad_roi.shape and roi.size > 0:
-                    blended = cv2.addWeighted(roi, 1 - alpha, grad_roi, alpha, 0)
-                    frame[y1:y2, x1:x2] = blended
+                if detection.box is not None and len(detection.box) == 4:
+                    x1, y1, x2, y2 = detection.box
+                    
+                    # Ensure coordinates are within bounds
+                    x1 = max(0, min(x1, frame.shape[1] - 1))
+                    y1 = max(0, min(y1, frame.shape[0] - 1))
+                    x2 = max(x1 + 1, min(x2, frame.shape[1]))
+                    y2 = max(y1 + 1, min(y2, frame.shape[0]))
+                    
+                    # Extract regions
+                    roi = frame[y1:y2, x1:x2]
+                    grad_roi = gradcam_img[y1:y2, x1:x2]
+                    
+                    # Ensure ROI shapes match and are valid
+                    if roi.shape == grad_roi.shape and roi.size > 0:
+                        try:
+                            # Apply alpha blending
+                            alpha = DEFAULT_GRADCAM_ALPHA
+                            blended = cv2.addWeighted(roi, 1 - alpha, grad_roi, alpha, 0)
+                            frame[y1:y2, x1:x2] = blended
+                        except Exception as e:
+                            logging.warning(f"GradCAM blending failed for detection {detection}: {e}")
+                            # Fallback: just copy the GradCAM region
+                            frame[y1:y2, x1:x2] = grad_roi
         else:
-            # Use full Grad-CAM image
+            # Use full Grad-CAM image with alpha blending
             try:
-                gradcam_rgb = gradcam_img[..., ::-1]
-                frame = gradcam_rgb
+                alpha = DEFAULT_GRADCAM_ALPHA
+                frame = cv2.addWeighted(frame, 1 - alpha, gradcam_img, alpha, 0)
             except Exception as e:
-                logging.warning(f"Grad-CAM display failed: {e}")
+                logging.warning(f"Full GradCAM overlay failed: {e}")
+                # Fallback: replace frame with GradCAM
+                frame = gradcam_img.copy()
         
         return frame
     
@@ -263,6 +291,18 @@ class VideoInferenceApp:
         
         return False, False
     
+    def _reset_gradcam_state(self) -> None:
+        """Reset GradCAM processor state for new video"""
+        if self.gradcam_processor is not None:
+            try:
+                # Reset frame skip counter and clear buffers
+                self.gradcam_processor.frame_skip_counter = 0
+                self.gradcam_processor.last_gradcam_img = None
+                self.gradcam_processor.last_frame_shape = None
+                logging.debug("GradCAM state reset for new video")
+            except Exception as e:
+                logging.warning(f"Failed to reset GradCAM state: {e}")
+    
     def _cleanup_resources(self) -> None:
         """Clean up all resources when stopping the application"""
         try:
@@ -303,6 +343,9 @@ class VideoInferenceApp:
                     continue
                 
                 logging.info(f"Video {mp4}: {total_frames} frames, {cap.get(cv2.CAP_PROP_FPS):.2f} FPS")
+
+                # Reset GradCAM state for new video
+                self._reset_gradcam_state()
 
                 # Setup video properties
                 fps = cap.get(cv2.CAP_PROP_FPS)
@@ -360,6 +403,12 @@ class VideoInferenceApp:
                         if frame is not None and self.gradcam_processor is not None:
                             logging.debug(f"Processing frame {frame_count} with shape {frame.shape}")
                             try:
+                                # Dynamically adjust frame skip threshold based on performance
+                                if inf_time > 100:  # If inference is slow (>100ms)
+                                    self.gradcam_processor.set_frame_skip_threshold(10)
+                                elif inf_time < 50:  # If inference is fast (<50ms)
+                                    self.gradcam_processor.set_frame_skip_threshold(3)
+                                
                                 gradcam_img = self.gradcam_processor.process_gradcam(
                                     frame, detections, self.display_config.gradcam_in_box_only
                                 )
@@ -397,12 +446,9 @@ class VideoInferenceApp:
                             print(f"Frame {frame_count}: shape={display_img.shape}, detections={len(detections)}, inf_time={inf_time:.1f}ms")
                             print(f"Window state: first_frame={first_frame}, fullscreen_size={fullscreen_size}")
                         
-                        # Ensure window is updated
-                        cv2.waitKey(1)  # Small wait to ensure window updates
-                        
                         # Handle key input with proper timing
                         try:
-                            key = cv2.waitKey(max(1, wait_ms - 1)) & 0xFF
+                            key = cv2.waitKey(max(1, wait_ms)) & 0xFF
                         except Exception as e:
                             logging.warning(f"Error handling key input: {e}")
                             key = 0
@@ -416,6 +462,8 @@ class VideoInferenceApp:
                             return
                         elif should_next_video:
                             self._cleanup_resources()
+                            # Reset GradCAM state for next video
+                            self._reset_gradcam_state()
                             break
                         
                         self.visualizer.frame_idx += 1

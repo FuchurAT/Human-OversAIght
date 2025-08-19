@@ -215,7 +215,3 @@ LOGGING_CONFIG = {
     # ... other settings
 }
 ```
-
-## License
-
-This project is part of the human-oversaight system. Please refer to the main project license for usage terms. 
