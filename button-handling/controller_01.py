@@ -4,8 +4,8 @@ import serial
 import time
 
 # — Configuration — 
-WRITE_PORT   = 'COM23'    # Port to send PWM values (Nano)s
-READ_PORT    = 'COM11'     # Port to read button states (Mega)
+WRITE_PORT   = '/dev/ttyUSB0'    # Port to send PWM values (Nano)s
+READ_PORT    = '/dev/ttyACM0'     # Port to read button states (Mega)
 BAUD_RATE    = 115200
 NUM_CHANNELS = 48
 FPS          = 50

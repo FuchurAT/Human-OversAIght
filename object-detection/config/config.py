@@ -57,7 +57,7 @@ FPS_LINE_SPACING = 30
 # DEFAULT_MODEL_PATH = "/home/theopsroom/App/src/cnn-detection/app/runs/train/weights/best.pt"
 # DEFAULT_VIDEO_PATH = "/home/theopsroom/human-oversaight/client/apps/object-detection/videos/"
 DEFAULT_MODEL_PATH = "/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt"
-DEFAULT_VIDEO_PATH = "/home/theopsroom/Documents/OVERSAIGHT-VIDEOS"
+DEFAULT_VIDEO_PATH = "/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS"
 
 # Button-to-Keyboard Mapping Configuration
 # Maps the 48 buttons from Arduino Mega to keyboard actions in the detection application

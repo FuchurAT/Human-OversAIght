@@ -372,7 +372,7 @@ def main():
                        help="Path to the annotated dataset")
     parser.add_argument("--output_dir", type=str, default="runs/train",
                        help="Directory to save training results")
-    parser.add_argument("--model_size", type=str, default="n", choices=['n', 's', 'm', 'l', 'x'],
+    parser.add_argument("--model_size", type=str, default="s", choices=['n', 's', 'm', 'l', 'x'],
                        help="YOLO model size (n=nano, s=small, m=medium, l=large, x=xlarge)")
     parser.add_argument("--epochs", type=int, default=100,
                        help="Number of training epochs")

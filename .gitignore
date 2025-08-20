@@ -1,7 +1,13 @@
 __pycache__
 
 /data
+**/annotated_data
 
+annotation.log
+training.log
+
+results.csv
+yolo**.pt
 **/runs/detect
 **/runs/train/*.jpg
 last.pt

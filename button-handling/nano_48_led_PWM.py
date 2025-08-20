@@ -4,7 +4,7 @@ import serial
 import time
 
 # === Configuration ===
-SERIAL_PORT        = 'COM24'    # your Mega’s port found in device manager on Windows or Linux equivalent, is usually detected once and stays the same.
+SERIAL_PORT        = '/dev/ttyUSB0'    # your Mega’s port found in device manager on Windows or Linux equivalent, is usually detected once and stays the same.
 BAUD_RATE          = 115200
 UPDATE_INTERVAL_MS = 20         # send every 20 ms (~50 FPS)
 NUM_SLIDERS        = 48
