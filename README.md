@@ -1,10 +1,8 @@
 # Object Detection Application
 
-A refactored, modular object detection application built with YOLO, featuring real-time video processing, Grad-CAM visualization, and multi-monitor support.
+A modular object detection application built with YOLO, featuring real-time video processing, Grad-CAM visualization, and multi-monitor support.
 
 ## Architecture Overview
-
-The application has been refactored into a clean, modular architecture with clear separation of concerns:
 
 ### Core Classes
 
