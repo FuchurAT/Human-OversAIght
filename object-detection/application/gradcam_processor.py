@@ -17,6 +17,7 @@ class GradCAMProcessor:
     """Handles Grad-CAM processing and visualization"""
     
     def __init__(self, model_path: str, temp_frame_path: str = "temp_frame.jpg"):
+        self.model_path = model_path
         self.temp_frame_path = temp_frame_path
         self.frame_buffer = None
         self.gradcam_buffer = None
@@ -48,14 +49,21 @@ class GradCAMProcessor:
                 show_box=False, 
                 renormalize=False
             )
+            
+            # Verify the model was created successfully
+            if self.cam_model is None:
+                raise ValueError("YOLOv8_Explainer returned None")
+                
             self.model_loaded = True
             logging.info("Grad-CAM model loaded successfully")
         except ImportError:
             logging.warning("YOLOv8_Explainer not available, Grad-CAM disabled")
             self.model_loaded = False
+            self.cam_model = None
         except Exception as e:
             logging.warning(f"Failed to load Grad-CAM model: {e}")
             self.model_loaded = False
+            self.cam_model = None
     
     def _initialize_buffers(self) -> None:
         """Initialize buffer arrays with default values"""
@@ -106,9 +114,24 @@ class GradCAMProcessor:
     
     def get_gradcam_image(self, frame: np.ndarray) -> np.ndarray:
         """Generate Grad-CAM visualization for a frame"""
-        if not self.model_loaded:
-            logging.debug("Grad-CAM model not loaded, returning original frame")
-            return frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
+        if not self.is_model_ready():
+            # Try to reload the model if it's not ready
+            if self.needs_reload():
+                logging.info("Grad-CAM model not ready, attempting to reload...")
+                if self.reload_model(self.model_path):
+                    logging.info("Grad-CAM model reloaded successfully")
+                else:
+                    logging.warning("Failed to reload Grad-CAM model")
+                    # Log detailed status for debugging
+                    status = self.get_model_status()
+                    logging.debug(f"Model status: {status}")
+                    return frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
+            else:
+                logging.warning("Grad-CAM model not ready, returning original frame")
+                # Log detailed status for debugging
+                status = self.get_model_status()
+                logging.debug(f"Model status: {status}")
+                return frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
         
         # Check if frame is valid
         if frame is None:
@@ -161,9 +184,18 @@ class GradCAMProcessor:
     def process_gradcam(self, frame: np.ndarray, detections: List[Detection], 
                        in_box_only: bool = True) -> np.ndarray:
         """Process Grad-CAM for multiple detections with improved synchronization"""
-        if not self.model_loaded:
-            logging.debug("Grad-CAM model not loaded, returning original frame")
-            return frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
+        if not self.is_model_ready():
+            # Try to reload the model if it's not ready
+            if self.needs_reload():
+                logging.info("Grad-CAM model not ready, attempting to reload...")
+                if self.reload_model(self.model_path):
+                    logging.info("Grad-CAM model reloaded successfully")
+                else:
+                    logging.warning("Failed to reload Grad-CAM model")
+                    return frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
+            else:
+                logging.debug("Grad-CAM model not ready, returning original frame")
+                return frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
         
         # Check if frame is valid
         if frame is None:
@@ -238,7 +270,41 @@ class GradCAMProcessor:
     
     def is_model_loaded(self) -> bool:
         """Check if the Grad-CAM model is successfully loaded"""
-        return self.model_loaded
+        return self.model_loaded and hasattr(self, 'cam_model') and self.cam_model is not None
+    
+    def is_model_ready(self) -> bool:
+        """Check if the Grad-CAM model is ready to use"""
+        model_loaded = self.model_loaded
+        has_cam_model = hasattr(self, 'cam_model')
+        cam_model_not_none = self.cam_model is not None if has_cam_model else False
+        is_callable = callable(self.cam_model) if has_cam_model and cam_model_not_none else False
+        
+        if not model_loaded:
+            logging.debug(f"GradCAM model not ready: model_loaded={model_loaded}")
+        elif not has_cam_model:
+            logging.debug(f"GradCAM model not ready: has_cam_model={has_cam_model}")
+        elif not cam_model_not_none:
+            logging.debug(f"GradCAM model not ready: cam_model is None")
+        elif not is_callable:
+            logging.debug(f"GradCAM model not ready: cam_model is not callable")
+        
+        return (model_loaded and has_cam_model and cam_model_not_none and is_callable)
+    
+    def get_model_status(self) -> dict:
+        """Get detailed status of the Grad-CAM model"""
+        return {
+            'model_loaded': self.model_loaded,
+            'has_cam_model': hasattr(self, 'cam_model'),
+            'cam_model_type': type(self.cam_model).__name__ if hasattr(self, 'cam_model') else 'None',
+            'cam_model_is_none': self.cam_model is None if hasattr(self, 'cam_model') else True,
+            'cam_model_callable': callable(self.cam_model) if hasattr(self, 'cam_model') and self.cam_model is not None else False
+        }
+    
+    def needs_reload(self) -> bool:
+        """Check if the Grad-CAM processor needs to be reloaded"""
+        return (not self.is_model_ready() and 
+                hasattr(self, 'model_path') and 
+                self.model_path is not None)
     
     def cleanup(self) -> None:
         """Clean up Grad-CAM resources"""
@@ -256,11 +322,54 @@ class GradCAMProcessor:
             self.gradcam_buffer = None
             self.last_gradcam_img = None
             self.last_frame_shape = None
-            self.cam_model = None
+            # Don't clear cam_model here - it will be reloaded if needed
+            # self.cam_model = None
         except Exception as e:
             logging.debug(f"Error during buffer cleanup: {e}")
         
         logging.debug("Grad-CAM resources cleaned up")
+    
+    def reload_model(self, model_path: str) -> bool:
+        """Attempt to reload the Grad-CAM model"""
+        try:
+            logging.info("Attempting to reload Grad-CAM model...")
+            
+            # Clean up existing model
+            if hasattr(self, 'cam_model'):
+                self.cam_model = None
+            
+            # Patch torch.load to handle PyTorch 2.6+ security restrictions
+            import torch
+            original_load = torch.load
+            
+            def patched_load(*args, **kwargs):
+                kwargs['weights_only'] = False
+                return original_load(*args, **kwargs)
+            
+            torch.load = patched_load
+            
+            from YOLOv8_Explainer import yolov8_heatmap
+            self.cam_model = yolov8_heatmap(
+                weight=model_path,
+                conf_threshold=DEFAULT_GRADCAM_CONF_THRESHOLD,
+                method="GradCAM",
+                show_box=False, 
+                renormalize=False
+            )
+            
+            # Verify the model was created successfully
+            if self.cam_model is None:
+                raise ValueError("YOLOv8_Explainer returned None")
+                
+            self.model_loaded = True
+            logging.info("Grad-CAM model reloaded successfully")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Failed to reload Grad-CAM model: {e}")
+            self.model_loaded = False
+            self.cam_model = None
+            return False
     
     def _iou(self, box1, box2):
         """Calculate Intersection over Union between two bounding boxes"""

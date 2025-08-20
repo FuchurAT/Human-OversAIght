@@ -1,9 +1,56 @@
+"""
+Auto-Annotator for Armored Vehicles Detection using Grounding DINO
+
+This script automatically downloads the required Grounding DINO model files if they
+are not available, eliminating the need for manual setup. The model will be saved
+in a 'models' directory for future use.
+
+Features:
+- Automatic model download with progress bars
+- Fallback to urllib if requests library is not available
+- File validation to ensure downloads are complete
+- YOLO format annotation output
+- Support for multiple vehicle categories
+
+Usage:
+    python annotate.py --data_dir data --output_dir annotated_data
+"""
+
 import sys
 import logging
 from pathlib import Path
 import argparse
 from tqdm import tqdm
-from groundingdino.util.inference import load_model, load_image, predict
+import os
+
+# Check for required dependencies
+try:
+    import torch
+    logging.info(f"PyTorch version: {torch.__version__}")
+except ImportError:
+    print("ERROR: PyTorch is required but not installed.")
+    print("Please install it with: pip install torch torchvision")
+    sys.exit(1)
+
+try:
+    from groundingdino.util.inference import load_model, load_image, predict
+    logging.info("Grounding DINO imported successfully")
+except ImportError:
+    print("ERROR: Grounding DINO is required but not installed.")
+    print("Please install it with: pip install groundingdino-py")
+    sys.exit(1)
+
+# Try to import requests, fallback to urllib if not available
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+    logging.info("Using requests library for downloads")
+except ImportError:
+    REQUESTS_AVAILABLE = False
+    import urllib.request
+    import urllib.error
+    logging.info("Using urllib for downloads (install 'requests' for better performance)")
+
 from config.classes import CLASSES
 
 # Configure logging
@@ -39,6 +86,12 @@ class AutoAnnotator:
         (self.output_dir / 'images').mkdir(exist_ok=True)
         (self.output_dir / 'labels').mkdir(exist_ok=True)
         
+        # Verify output directories were created
+        if not (self.output_dir / 'images').exists() or not (self.output_dir / 'labels').exists():
+            raise RuntimeError(f"Failed to create output directories in {self.output_dir}")
+        
+        logging.info(f"Output directories created: {self.output_dir}")
+        
         # Vehicle categories and their search prompts
         self.categories = CLASSES
         
@@ -54,26 +107,213 @@ class AutoAnnotator:
         # Initialize Grounding DINO model
         logging.info("Loading Grounding DINO model...")
         
-        # Check if model files exist in models directory
-        script_dir = Path(__file__).parent
-        model_dir = script_dir / "models"
-        config_path = model_dir / "groundingdino_swint_ogc.py"
-        weights_path = model_dir / "groundingdino_swint_ogc.pth"
-        
-        if not config_path.exists() or not weights_path.exists():
-            logging.error("Model files not found. Please run setup_annotation.py first to download the required model files.")
-            logging.error(f"Expected files:")
-            logging.error(f"  - {config_path}")
-            logging.error(f"  - {weights_path}")
-            raise FileNotFoundError("Model files not found. Run setup_annotation.py first.")
-        
-        self.model = load_model(str(config_path), str(weights_path))
+        # Check if model files exist and download if needed
+        self.model = self._load_or_download_model()
         logging.info("Model loaded successfully!")
         
+    def _download_file(self, url, filepath, description="file"):
+        """Download a file with progress bar."""
+        try:
+            if REQUESTS_AVAILABLE:
+                return self._download_with_requests(url, filepath, description)
+            else:
+                return self._download_with_urllib(url, filepath, description)
+        except Exception as e:
+            logging.error(f"Failed to download {description}: {e}")
+            return False
+    
+    def _download_with_requests(self, url, filepath, description="file"):
+        """Download using requests library with progress bar."""
+        try:
+            response = requests.get(url, stream=True, timeout=300)  # 5 minute timeout
+            response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            
+            with open(filepath, 'wb') as file, tqdm(
+                desc=f"Downloading {description}",
+                total=total_size,
+                unit='B',
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as pbar:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        file.write(chunk)
+                        pbar.update(len(chunk))
+            
+            # Verify file was written completely
+            if filepath.exists() and filepath.stat().st_size > 0:
+                return True
+            else:
+                logging.error(f"Downloaded file appears to be empty or missing: {filepath}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Request error downloading {description}: {e}")
+            return False
+        except Exception as e:
+            logging.error(f"Unexpected error downloading {description}: {e}")
+            return False
+    
+    def _download_with_urllib(self, url, filepath, description="file"):
+        """Download using urllib library with progress bar."""
+        try:
+            with tqdm(desc=f"Downloading {description}", unit='B', unit_scale=True) as pbar:
+                def progress_hook(block_num, block_size, total_size):
+                    if total_size > 0:
+                        pbar.total = total_size
+                        pbar.update(block_size)
+                
+                urllib.request.urlretrieve(url, filepath, progress_hook)
+            
+            # Verify file was written completely
+            if filepath.exists() and filepath.stat().st_size > 0:
+                return True
+            else:
+                logging.error(f"Downloaded file appears to be empty or missing: {filepath}")
+                return False
+                
+        except urllib.error.URLError as e:
+            logging.error(f"URL error downloading {description}: {e}")
+            return False
+        except Exception as e:
+            logging.error(f"Error downloading {description}: {e}")
+            return False
+    
+    def _download_file_with_retry(self, url, filepath, description="file", max_retries=3):
+        """Download a file with retry mechanism."""
+        for attempt in range(max_retries):
+            try:
+                logging.info(f"Download attempt {attempt + 1}/{max_retries} for {description}")
+                if self._download_file(url, filepath, description):
+                    return True
+                else:
+                    logging.warning(f"Download attempt {attempt + 1} failed for {description}")
+            except Exception as e:
+                logging.warning(f"Download attempt {attempt + 1} failed with error: {e}")
+            
+            # Wait before retry (exponential backoff)
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logging.info(f"Waiting {wait_time} seconds before retry...")
+                import time
+                time.sleep(wait_time)
+        
+        logging.error(f"All {max_retries} download attempts failed for {description}")
+        return False
+    
+    def _load_or_download_model(self):
+        """Load the model, downloading it first if it doesn't exist."""
+        script_dir = Path(__file__).parent
+        model_dir = script_dir / "models"
+        model_dir.mkdir(exist_ok=True)
+        
+        # Use the config file from the installed package
+        import groundingdino
+        package_config_path = Path(groundingdino.__file__).parent / "config" / "GroundingDINO_SwinT_OGC.py"
+        
+        weights_path = model_dir / "groundingdino_swint_ogc.pth"
+        
+        # Clean up any partial downloads
+        for partial_file in model_dir.glob("*.tmp"):
+            try:
+                partial_file.unlink()
+                logging.info(f"Cleaned up partial download: {partial_file}")
+            except Exception as e:
+                logging.warning(f"Could not clean up partial download {partial_file}: {e}")
+        
+        # Check if weights file exists and is valid
+        if weights_path.exists():
+            if self._validate_weights_file(weights_path):
+                logging.info("Weights file found and validated, loading existing model...")
+                try:
+                    return load_model(str(package_config_path), str(weights_path))
+                except Exception as e:
+                    logging.warning(f"Failed to load existing model: {e}")
+                    logging.info("Removing corrupted weights file and re-downloading...")
+                    if weights_path.exists():
+                        weights_path.unlink()
+            else:
+                logging.info("Existing weights file failed validation, re-downloading...")
+                if weights_path.exists():
+                    weights_path.unlink()
+        
+        # Download weights file if it doesn't exist or is invalid
+        logging.info("Downloading required model weights file...")
+        
+        if not REQUESTS_AVAILABLE:
+            logging.info("Note: Install 'requests' package for better download performance: pip install requests")
+        
+        # Grounding DINO weights URL
+        weights_url = "https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth"
+        
+        # Download weights file
+        if not weights_path.exists():
+            logging.info("Downloading model weights file...")
+            if not self._download_file_with_retry(weights_url, weights_path, "weights file"):
+                raise RuntimeError("Failed to download model weights file")
+        
+        # Validate downloaded weights file
+        logging.info("Validating downloaded weights file...")
+        if not self._validate_weights_file(weights_path):
+            raise RuntimeError("Downloaded weights file appears to be corrupted or incomplete")
+        
+        logging.info("Weights file downloaded successfully!")
+        
+        # Load the downloaded model
+        try:
+            logging.info("Loading model into memory (this may take a few moments)...")
+            model = load_model(str(package_config_path), str(weights_path))
+            logging.info("Model loaded successfully!")
+            return model
+        except Exception as e:
+            logging.error(f"Failed to load model after download: {e}")
+            # Try to provide more helpful error messages
+            if "zip archive" in str(e) or "central directory" in str(e):
+                logging.error("The weights file appears to be corrupted. This usually means the download was incomplete.")
+                logging.error("Try running the script again, or check your internet connection.")
+            elif "CUDA" in str(e) or "GPU" in str(e):
+                logging.error("GPU-related error. The model will use CPU instead.")
+                logging.error("If you want to use GPU, ensure CUDA is properly installed.")
+            else:
+                logging.error("Unknown error during model loading. Check the error details above.")
+            raise RuntimeError(f"Model downloaded but failed to load: {e}")
+    
+    def _validate_weights_file(self, weights_path):
+        """Validate that the downloaded weights file is not corrupted."""
+        try:
+            # Weights file should be at least 100MB (typical size for this model)
+            weights_size = weights_path.stat().st_size
+            if weights_size < 100 * 1024 * 1024:
+                logging.error(f"Weights file too small: {weights_size} bytes")
+                return False
+            
+            # Try to open the weights file to ensure it's not completely corrupted
+            try:
+                import torch
+                # Just try to open the file to see if it's readable
+                with open(weights_path, 'rb') as f:
+                    # Read first few bytes to check if file is accessible
+                    header = f.read(1024)
+                    if len(header) == 0:
+                        logging.error("Weights file appears to be empty or unreadable")
+                        return False
+            except Exception as e:
+                logging.error(f"Error reading weights file: {e}")
+                return False
+            
+            logging.info(f"Weights file validation passed - Size: {weights_size} bytes")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Error validating weights file: {e}")
+            return False
+
     def get_image_paths(self):
         """Get all image paths from the armored_vehicles directory, excluding NEGATIVES."""
         image_paths = []
-        armored_vehicles_dir = self.data_dir / 'dataset'
+        armored_vehicles_dir = self.data_dir
         
         if not armored_vehicles_dir.exists():
             logging.error(f"Directory not found: {armored_vehicles_dir}")
@@ -208,24 +448,62 @@ class AutoAnnotator:
     
     def create_dataset_yaml(self):
         """Create a YAML file for the dataset configuration."""
-        yaml_content = ""
-        """# Dataset configuration for YOLO training
-        path: {self.output_dir.absolute()}
-        train: images
-        val: images
+        yaml_content = f"""# Dataset configuration for YOLO training
+path: {self.output_dir.absolute()}
+train: images
+val: images
 
-        nc: {len(self.class_names)}
-        names: {self.class_names}
-        """
+nc: {len(self.class_names)}
+names: {self.class_names}
+"""
         
         with open(self.output_dir / 'dataset.yaml', 'w') as f:
             f.write(yaml_content)
         
         logging.info(f"Created dataset configuration: {self.output_dir / 'dataset.yaml'}")
     
+    def validate_dataset_structure(self):
+        """Validate that the dataset directory has the expected structure."""
+        logging.info("Validating dataset structure...")
+        
+        if not self.data_dir.exists():
+            logging.error(f"Data directory does not exist: {self.data_dir}")
+            return False
+        
+        # Check if we have any category directories
+        category_dirs = [d for d in self.data_dir.iterdir() if d.is_dir()]
+        if not category_dirs:
+            logging.error(f"No category directories found in {self.data_dir}")
+            logging.info("Expected structure: data_dir/category_name/*.jpg")
+            return False
+        
+        # Check for images in each category
+        total_images = 0
+        for category_dir in category_dirs:
+            if category_dir.name == 'NEGATIVES':
+                continue  # Skip NEGATIVES for now
+            images = list(category_dir.glob("*.jpg"))
+            if images:
+                logging.info(f"Found {len(images)} images in category '{category_dir.name}'")
+                total_images += len(images)
+            else:
+                logging.warning(f"No images found in category '{category_dir.name}'")
+        
+        if total_images == 0:
+            logging.error("No images found in any category directory")
+            return False
+        
+        logging.info(f"Dataset validation passed. Found {total_images} total images.")
+        return True
+    
     def run(self):
         """Run the annotation process."""
         logging.info("Starting automatic annotation process...")
+        
+        # Validate dataset structure first
+        if not self.validate_dataset_structure():
+            logging.error("Dataset validation failed. Please check your data directory structure.")
+            return
         
         # Copy NEGATIVES images first
         self.copy_negatives()
@@ -261,7 +539,7 @@ class AutoAnnotator:
 
 def main():
     parser = argparse.ArgumentParser(description="Auto-annotate images using Grounding DINO")
-    parser.add_argument("--data_dir", type=str, default="data", 
+    parser.add_argument("--data_dir", type=str, default="dataset", 
                        help="Path to data directory containing armored_vehicles folder (relative to script location)")
     parser.add_argument("--output_dir", type=str, default="annotated_data",
                        help="Path to save annotated data (relative to script location)")
@@ -271,6 +549,13 @@ def main():
                        help="Minimum text similarity threshold")
     
     args = parser.parse_args()
+    
+    print("=" * 80)
+    print("Auto-Annotator for Armored Vehicles Detection")
+    print("=" * 80)
+    print("This script will automatically download the required Grounding DINO model")
+    print("if it's not already available. The model will be saved in the 'models' directory.")
+    print("=" * 80)
     
     # Create annotator and run
     annotator = AutoAnnotator(

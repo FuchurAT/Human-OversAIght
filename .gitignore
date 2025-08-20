@@ -1,6 +1,7 @@
 __pycache__
 
 /data
+**/dataset
 **/annotated_data
 
 annotation.log
@@ -8,6 +9,7 @@ training.log
 
 results.csv
 yolo**.pt
+groundingdino**.**
 **/runs/detect
 **/runs/train/*.jpg
 last.pt

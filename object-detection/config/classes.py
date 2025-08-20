@@ -13,6 +13,7 @@ CLASSES = {
     "POLICE_VEHICLE": ["Police vehicle", "Police car", "Police Truck"],
     # "PRISON": ["Incarceration facility or prison structure"],
     # "PROTEST": ["Crowd demonstrating with signs or banners"],
+    "PROTESTOR": ["Protestor demonstrating with signs or banners"],
     #"RIOT": ["Violent or chaotic protest scene"],
     "RIOT_POLICE": ["Police in riot gear, shields, and helmets"],
     #"TEARGAS": ["Cloud of gas or tear gas canister in crowd"],

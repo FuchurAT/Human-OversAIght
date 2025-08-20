@@ -315,6 +315,25 @@ class VideoInferenceApp:
             except Exception as e:
                 logging.warning(f"Failed to reset GradCAM state: {e}")
     
+    def _cleanup_video_resources(self) -> None:
+        """Clean up video-specific resources when switching videos"""
+        try:
+            # Only clean up video-related resources, not core components
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+            
+            gc.collect()
+            
+            # Clean up visualizer audio resources for new video
+            if hasattr(self, 'visualizer'):
+                self.visualizer.cleanup_audio()
+            
+            logging.debug("Video resources cleaned up for next video")
+            
+        except Exception as e:
+            logging.warning(f"Video resource cleanup failed: {e}")
+    
     def _cleanup_resources(self) -> None:
         """Clean up all resources when stopping the application"""
         try:
@@ -427,6 +446,16 @@ class VideoInferenceApp:
                         if frame is not None and self.gradcam_processor is not None:
                             logging.debug(f"Processing frame {frame_count} with shape {frame.shape}")
                             try:
+                                # Check if GradCAM processor needs reloading
+                                if self.gradcam_processor.needs_reload():
+                                    logging.info("GradCAM processor needs reloading, attempting...")
+                                    if self.gradcam_processor.reload_model(self.model_path):
+                                        logging.info("GradCAM processor reloaded successfully")
+                                    else:
+                                        logging.warning("Failed to reload GradCAM processor")
+                                        gradcam_img = frame.copy()
+                                        continue
+                                
                                 # Dynamically adjust frame skip threshold based on performance
                                 if inf_time > 100:  # If inference is slow (>100ms)
                                     self.gradcam_processor.set_frame_skip_threshold(10)
@@ -485,12 +514,31 @@ class VideoInferenceApp:
                             cap.release()
                             return
                         elif should_next_video:
-                            self._cleanup_resources()
+                            # Clean up current video resources but keep core components
+                            self._cleanup_video_resources()
                             # Reset GradCAM state for next video
                             self._reset_gradcam_state()
                             # Reinitialize audio for next video
                             if hasattr(self, 'visualizer'):
                                 self.visualizer.reinitialize_audio()
+                            # Reinitialize button handler for next video
+                            if hasattr(self, 'button_handler'):
+                                if not self.button_handler.is_running:
+                                    logging.info("Button handler not running, restarting...")
+                                    self.button_handler.restart()
+                                else:
+                                    logging.debug("Button handler already running")
+                            # Reload GradCAM processor if needed
+                            if (self.gradcam_processor is not None and 
+                                self.gradcam_processor.needs_reload()):
+                                self.gradcam_processor.reload_model(self.model_path)
+                            elif self.gradcam_processor is None:
+                                # Reinitialize GradCAM processor if it was cleaned up
+                                try:
+                                    self.gradcam_processor = GradCAMProcessor(self.model_path)
+                                    logging.info("GradCAM processor reinitialized for new video")
+                                except Exception as e:
+                                    logging.warning(f"Failed to reinitialize GradCAM processor: {e}")
                             break
                         
                         self.visualizer.frame_idx += 1

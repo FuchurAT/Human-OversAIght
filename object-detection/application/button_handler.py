@@ -128,6 +128,11 @@ class ButtonHandler:
     def start_serial_monitoring(self):
         """Start monitoring serial port for button inputs"""
         try:
+            # Check if already running
+            if self.is_running:
+                logging.debug("Button monitoring already running")
+                return True
+            
             # Check port availability first
             if not self.check_serial_port_availability():
                 logging.error("Cannot start button monitoring - serial port unavailable")
@@ -498,6 +503,13 @@ class ButtonHandler:
         if self.serial_thread and self.serial_thread.is_alive():
             self.serial_thread.join(timeout=1.0)
         logging.info("ButtonHandler stopped")
+    
+    def restart(self):
+        """Restart button monitoring"""
+        logging.info("Restarting button monitoring...")
+        self.stop()
+        time.sleep(0.1)  # Brief pause to ensure clean shutdown
+        return self.start_serial_monitoring()
     
     def is_connected(self) -> bool:
         """Check if serial connection is active"""
