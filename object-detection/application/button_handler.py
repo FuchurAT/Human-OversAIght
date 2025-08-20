@@ -7,6 +7,7 @@ in the detection application.
 import threading
 import time
 import logging
+import serial
 from config.config import BUTTON_MAPPING, BUTTON_CONFIG, BUTTON_ACTIONS
 
 
@@ -19,9 +20,6 @@ class ButtonHandler:
     def __init__(self, app_instance=None):
         self.app_instance = app_instance
         self.button_states = [False] * 48
-        self.button_timestamps = [0] * 48
-        self.button_hold_states = [False] * 48
-        self.last_button_states = [False] * 48
         
         # Serial connection
         self.serial_connection = None
@@ -34,6 +32,10 @@ class ButtonHandler:
         
         # Configuration
         self.config = BUTTON_CONFIG.copy()
+        
+        # Button debouncing
+        self.last_button_press_time = [0.0] * 48
+        self.debounce_delay = self.config.get('debounce_time', 100) / 1000.0  # Convert ms to seconds
         
         logging.info("ButtonHandler initialized")
     
@@ -93,74 +95,55 @@ class ButtonHandler:
     def start_serial_monitoring(self):
         """Start monitoring serial port for button inputs"""
         try:
-            import serial
+            self.is_running = True
             self.serial_thread = threading.Thread(
                 target=self._serial_monitor_loop,
-                daemon=True,
-                args=(self.config['serial_port'], self.config['baud_rate'])
+                daemon=True
             )
             self.serial_thread.start()
-            self.is_running = True
             logging.info(f"Started button monitoring on {self.config['serial_port']}")
         except ImportError:
             logging.error("pyserial not installed. Please install it: pip install pyserial")
         except Exception as e:
             logging.error(f"Failed to start button monitoring: {e}")
     
-    def _serial_monitor_loop(self, port: str, baud_rate: int):
-        """Main loop for monitoring serial port"""
-        import serial
+    def _serial_monitor_loop(self):
+        """Main loop for monitoring serial port - simplified like mega_48_buttons_read.py"""
         
         while self.is_running:
             try:
-                with serial.Serial(port, baud_rate, timeout=0.1) as ser:
+                with serial.Serial(self.config['serial_port'], self.config['baud_rate'], timeout=0.1) as ser:
                     while self.is_running:
                         line = ser.readline().decode('ascii', errors='replace').strip()
                         if line:
                             self._process_serial_line(line)
-                        time.sleep(self.config['polling_interval'] / 1000.0)
             except Exception as e:
                 logging.error(f"Serial connection error: {e}")
                 time.sleep(1.0)  # Wait before retrying
     
     def _process_serial_line(self, line: str):
-        """Process incoming serial data and update button states"""
+        """Process incoming serial data and update button states - simplified like mega_48_buttons_read.py"""
         parts = line.split(',')
         if len(parts) == 48:
-            current_time = time.time() * 1000  # Convert to milliseconds
-            
+            # Update all button states at once like the working version
             for i, part in enumerate(parts):
                 button_pressed = part == '1'
-                self._update_button_state(i, button_pressed, current_time)
+                # Only handle button press if state changed from False to True and debounce time has passed
+                if button_pressed and not self.button_states[i]:
+                    current_time = time.time()
+                    if current_time - self.last_button_press_time[i] >= self.debounce_delay:
+                        self._handle_button_press(i)
+                        self.last_button_press_time[i] = current_time
+                self.button_states[i] = button_pressed
     
-    def _update_button_state(self, button_id: int, pressed: bool, timestamp: float):
-        """Update button state and handle debouncing"""
-        if button_id >= 48:
-            return
-        
-        # Debouncing
-        if pressed and not self.button_states[button_id]:
-            if timestamp - self.button_timestamps[button_id] > self.config['debounce_time']:
-                self.button_states[button_id] = True
-                self.button_timestamps[button_id] = timestamp
-                self._handle_button_press(button_id, timestamp)
-        elif not pressed and self.button_states[button_id]:
-            self.button_states[button_id] = False
-            self.button_hold_states[button_id] = False
-            self._handle_button_release(button_id, timestamp)
-        
-        # Handle button hold
-        if pressed and self.button_states[button_id]:
-            self._handle_button_hold(button_id, timestamp)
-    
-    def _handle_button_press(self, button_id: int, timestamp: float):
-        """Handle button press event"""
+    def _handle_button_press(self, button_id: int):
+        """Handle button press event with debouncing"""
         if button_id in BUTTON_MAPPING:
             action_info = BUTTON_MAPPING[button_id]
             action_name = action_info['action']
             key = action_info['key']
             
-            logging.debug(f"Button {button_id} pressed: {action_name} (key: {key})")
+            logging.info(f"Button {button_id} pressed: {action_name} (key: {key})")
             
             # Execute action if callback exists
             if action_name in self.action_callbacks:
@@ -172,43 +155,8 @@ class ButtonHandler:
                         self._show_button_feedback(button_id)
                 except Exception as e:
                     logging.error(f"Error executing button action {action_name}: {e}")
-    
-    def _handle_button_release(self, button_id: int, timestamp: float):
-        """Handle button release event"""
-        if button_id in BUTTON_MAPPING:
-            action_info = BUTTON_MAPPING[button_id]
-            action_name = action_info['action']
-            
-            logging.debug(f"Button {button_id} released: {action_name}")
-    
-    def _handle_button_hold(self, button_id: int, timestamp: float):
-        """Handle button hold event"""
-        if button_id in BUTTON_MAPPING:
-            action_info = BUTTON_MAPPING[button_id]
-            action_name = action_info['action']
-            
-            # Check if action supports hold behavior
-            if action_name in BUTTON_ACTIONS:
-                action_config = BUTTON_ACTIONS[action_name]
-                if action_config['type'] == 'hold':
-                    hold_timeout = self.config['button_hold_timeout']
-                    repeat_rate = self.config['button_repeat_rate']
-                    
-                    if not self.button_hold_states[button_id]:
-                        if timestamp - self.button_timestamps[button_id] > hold_timeout:
-                            self.button_hold_states[button_id] = True
-                            self._execute_hold_action(action_name)
-                    elif timestamp - self.button_timestamps[button_id] > repeat_rate:
-                        self.button_timestamps[button_id] = timestamp
-                        self._execute_hold_action(action_name)
-    
-    def _execute_hold_action(self, action_name: str):
-        """Execute action for held button"""
-        if action_name in self.action_callbacks:
-            try:
-                self.action_callbacks[action_name]()
-            except Exception as e:
-                logging.error(f"Error executing hold action {action_name}: {e}")
+        else:
+            logging.debug(f"Button {button_id} pressed but not mapped to any action")
     
     def _play_button_sound(self, button_id: int):
         """Play sound feedback for button press"""
@@ -474,7 +422,39 @@ class ButtonHandler:
         """Get states of all buttons"""
         return self.button_states.copy()
     
+    def get_button_info(self, button_id: int) -> dict:
+        """Get detailed information about a button including last press time"""
+        if 0 <= button_id < 48:
+            return {
+                'state': self.button_states[button_id],
+                'last_press_time': self.last_button_press_time[button_id],
+                'mapped_action': BUTTON_MAPPING.get(button_id, 'No mapping'),
+                'debounce_delay': self.debounce_delay
+            }
+        return {}
+    
+    def reset_button_states(self):
+        """Reset all button states and press times (useful for debugging)"""
+        self.button_states = [False] * 48
+        self.last_button_press_time = [0.0] * 48
+        logging.info("Button states and press times reset")
+    
     def set_app_instance(self, app_instance):
         """Set the application instance for action callbacks"""
         self.app_instance = app_instance
         logging.info("App instance set for ButtonHandler")
+    
+    def set_debounce_delay(self, delay: float):
+        """Set the debounce delay for button presses (in seconds)"""
+        self.debounce_delay = max(0.01, delay)  # Minimum 10ms delay
+        logging.info(f"Button debounce delay set to {self.debounce_delay}s")
+    
+    def get_debounce_delay(self) -> float:
+        """Get the current debounce delay"""
+        return self.debounce_delay
+    
+    def update_config(self, new_config: dict):
+        """Update configuration and recalculate debounce delay"""
+        self.config.update(new_config)
+        self.debounce_delay = self.config.get('debounce_time', 100) / 1000.0
+        logging.info(f"ButtonHandler config updated, debounce delay: {self.debounce_delay}s")

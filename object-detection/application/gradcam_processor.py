@@ -226,7 +226,7 @@ class GradCAMProcessor:
     def set_frame_skip_threshold(self, threshold: int) -> None:
         """Set the frame skip threshold for performance tuning"""
         self.frame_skip_threshold = max(1, threshold)  # Ensure minimum of 1
-        logging.info(f"Grad-CAM frame skip threshold set to {self.frame_skip_threshold}")
+        #logging.info(f"Grad-CAM frame skip threshold set to {self.frame_skip_threshold}")
     
     def is_model_loaded(self) -> bool:
         """Check if the Grad-CAM model is successfully loaded"""

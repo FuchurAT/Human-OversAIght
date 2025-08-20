@@ -3,7 +3,7 @@ import tkinter as tk
 import serial
 
 # === Configuration ===
-SERIAL_PORT = 'COM11'    # your Mega’s port found in device manager on Windows or Linux equivalent, is usually detected once and stays the same.
+SERIAL_PORT = '/dev/ttyACM0' # your Mega’s port found in device manager on Windows or Linux equivalent, is usually detected once and stays the same.
 BAUD_RATE   = 115200
 
 # Shared array for button states

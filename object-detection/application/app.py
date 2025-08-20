@@ -9,6 +9,9 @@ import time
 import numpy as np
 import torch
 import gc
+import sys
+import io
+from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
 from config.config import (
@@ -90,7 +93,8 @@ class VideoInferenceApp:
         # Add safe globals for PyTorch serialization
         self._add_safe_globals()
         
-        self.model = YOLO(self.model_path)
+        # Create YOLO model with verbose=False to suppress output
+        self.model = YOLO(self.model_path, verbose=False)
         logging.info(f"Loaded model: {self.model_path}")
     
     def _add_safe_globals(self) -> None:
@@ -121,9 +125,11 @@ class VideoInferenceApp:
         # Memory cleanup
         self.memory_manager.cleanup_memory()
         
-        # Run inference
+        # Run inference with output suppression
         inf_start = time.time()
-        results = self.model(frame, conf=0.15)
+        # Temporarily redirect stdout and stderr to suppress YOLO output
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            results = self.model(frame, conf=0.15, verbose=False)
         inf_time = (time.time() - inf_start) * 1000  # ms
         
         # Extract detections
@@ -398,7 +404,7 @@ class VideoInferenceApp:
                         if frame_count == self.max_frames and frame_count > 0:
                             break
                         
-                        print(f"FRAME: {frame_count}")
+                        #rint(f"FRAME: {frame_count}")
                         if not ret:
                             logging.info(f"Failed to grab frame {frame_count}: ret={ret}")
                             break

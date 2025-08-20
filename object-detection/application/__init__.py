@@ -1,7 +1,7 @@
 """
 Object Detection Inference Package
 
-A modular, refactored object detection application with YOLO integration,
+A modular object detection application with YOLO integration,
 Grad-CAM visualization, and multi-monitor support.
 """
 
