@@ -9,7 +9,6 @@ import time
 import numpy as np
 import torch
 import gc
-import sys
 import io
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
@@ -17,7 +16,9 @@ from typing import List, Tuple, Optional, Dict
 from config.config import (
     DEFAULT_BOX_THRESHOLD, DEFAULT_GRADCAM_ALPHA, LEGEND_WINDOW_WIDTH, 
     LEGEND_WINDOW_HEIGHT, LEGEND_FONT_SCALE, LEGEND_LINE_HEIGHT, LEGEND_BOX_PADDING,
-    DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, MIN_WINDOW_SIZE, DEFAULT_FPS
+    DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, MIN_WINDOW_SIZE, DEFAULT_FPS,
+    DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_SCALE_MODE,
+    DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO, DEFAULT_VIDEO_CENTER_ON_SCREEN, DEFAULT_VIDEO_SCALE_MULTIPLIER
 )
 
 from application.models import Detection, DisplayConfig
@@ -77,6 +78,10 @@ class VideoInferenceApp:
         logging.info(f"  Box threshold: {self.box_threshold}")
         logging.info(f"  GradCAM enabled: {self.gradcam_processor.is_model_loaded() if self.gradcam_processor is not None else False}")
         logging.info(f"  Button handler enabled: {self.button_handler.is_running}")
+        logging.info(f"  Window size config: {DEFAULT_WINDOW_WIDTH}x{DEFAULT_WINDOW_HEIGHT}")
+        logging.info(f"  Video size config: {DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT}")
+        logging.info(f"  Video scale mode: {DEFAULT_VIDEO_SCALE_MODE}")
+        logging.info(f"  Video scale multiplier: {DEFAULT_VIDEO_SCALE_MULTIPLIER}")
     
     def _initialize_model(self) -> None:
         """Initialize the YOLO model with proper error handling"""
@@ -587,7 +592,8 @@ class VideoInferenceApp:
             self._cleanup_resources()
             if out_writer:
                 out_writer.release()
-            return
+            # Don't return here - let it continue looping to the first video
+            logging.info("Completed all videos, looping back to first video...")
     
     def _create_legend_dict(self, detections: List[Detection]) -> Dict[int, Tuple[float, Tuple[int, int, int]]]:
         """Create legend dictionary from detections"""
@@ -600,42 +606,88 @@ class VideoInferenceApp:
     
     def _display_frame_fullscreen(self, window_name: str, display_img: np.ndarray, 
                                  first_frame: bool, fullscreen_size: Optional[Tuple[int, int]]) -> Tuple[bool, Optional[Tuple[int, int]]]:
-        """Display frame in fullscreen with proper sizing"""
+        """Display frame in fullscreen with configurable sizing"""
         if first_frame:
-            # Get fullscreen dimensions
-            try:
-                wx, wy, ww, wh = cv2.getWindowImageRect(window_name)
-            except Exception:
-                ww, wh = 0, 0
+            # Use configured video size or fall back to configured window size
+            if DEFAULT_VIDEO_WIDTH is not None and DEFAULT_VIDEO_HEIGHT is not None:
+                # Use configured video dimensions
+                ww, wh = DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT
+                logging.info(f"Using configured video size: {ww}x{wh}")
+            else:
+                # Use configured window dimensions from config.py
+                ww, wh = DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+                logging.info(f"Using configured window size: {ww}x{wh}")
             
-            if ww < MIN_WINDOW_SIZE or wh < MIN_WINDOW_SIZE:
-                try:
-                    import tkinter as tk
-                    root = tk.Tk()
-                    ww = root.winfo_screenwidth()
-                    wh = root.winfo_screenheight()
-                    root.destroy()
-                except Exception:
-                    ww, wh = DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+            # Log the source of the dimensions for debugging
+            if DEFAULT_VIDEO_WIDTH is not None and DEFAULT_VIDEO_HEIGHT is not None:
+                logging.info(f"Source: DEFAULT_VIDEO_WIDTH={DEFAULT_VIDEO_WIDTH}, DEFAULT_VIDEO_HEIGHT={DEFAULT_VIDEO_HEIGHT}")
+            else:
+                logging.info(f"Source: DEFAULT_WINDOW_WIDTH={DEFAULT_WINDOW_WIDTH}, DEFAULT_WINDOW_HEIGHT={DEFAULT_WINDOW_HEIGHT}")
             
             fullscreen_size = (ww, wh)
             first_frame = False
+            logging.info(f"Final fullscreen size set to: {ww}x{wh}")
         
         # Always display the frame, even if fullscreen_size is not set yet
         if fullscreen_size:
             ww, wh = fullscreen_size
             ih, iw = display_img.shape[:2]
-            scale = min(ww / iw, wh / ih)
-            new_w, new_h = ww, int(ih * scale)
+            
+            # Debug logging for scaling
+            logging.info(f"Scaling: video={iw}x{ih}, screen={ww}x{wh}, mode={DEFAULT_VIDEO_SCALE_MODE}")
+            
+            # Apply scaling based on configuration
+            if DEFAULT_VIDEO_SCALE_MODE == 'original':
+                # Display original size
+                new_w, new_h = iw, ih
+                logging.info(f"Original mode: keeping video size {iw}x{ih}")
+            elif DEFAULT_VIDEO_SCALE_MODE == 'stretch':
+                # Stretch to fill entire window (may distort video)
+                new_w, new_h = ww, wh
+                logging.info(f"Stretch mode: stretching to screen size {ww}x{wh}")
+            else:  # 'fit' mode (default)
+                # Fit to fill screen while maintaining aspect ratio
+                scale = min(ww / iw, wh / ih)
+                # Apply multiplier to use more screen space
+                scale_multiplier = DEFAULT_VIDEO_SCALE_MULTIPLIER
+                scale = scale * scale_multiplier
+                new_w, new_h = int(iw * scale), int(ih * scale)
+                logging.info(f"Fit mode: scale={scale:.3f}, multiplier={scale_multiplier}, final={new_w}x{new_h}")
+            
+            # Resize the image
             resized_img = cv2.resize(display_img, (new_w, new_h))
             
-            # Center on black background
-            fullscreen_img = np.zeros((wh, ww, 3), dtype=np.uint8)
-            y_offset = (wh - new_h) // 2
-            x_offset = (ww - new_w) // 2
-            fullscreen_img[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized_img
+            # Debug logging for final dimensions
+            logging.info(f"Final dimensions: original={iw}x{ih}, scaled={new_w}x{new_h}, screen={ww}x{wh}")
             
-            cv2.imshow(window_name, fullscreen_img)
+            if DEFAULT_VIDEO_CENTER_ON_SCREEN:
+                # Center on black background
+                fullscreen_img = np.zeros((wh, ww, 3), dtype=np.uint8)
+                y_offset = (wh - new_h) // 2
+                x_offset = (ww - new_w) // 2
+                
+                # Debug logging for positioning
+                logging.info(f"Positioning: screen={ww}x{wh}, video={new_w}x{new_h}, offsets=({x_offset}, {y_offset})")
+                
+                # Ensure the video fits within the screen bounds
+                if x_offset < 0 or y_offset < 0:
+                    logging.warning(f"Video too large for screen: video={new_w}x{new_h}, screen={ww}x{wh}")
+                    # Force video to fit within screen
+                    if new_w > ww:
+                        new_w = ww
+                        x_offset = 0
+                    if new_h > wh:
+                        new_h = wh
+                        y_offset = 0
+                    # Resize again if needed
+                    if new_w != display_img.shape[1] or new_h != display_img.shape[0]:
+                        resized_img = cv2.resize(display_img, (new_w, new_h))
+                
+                fullscreen_img[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = resized_img
+                cv2.imshow(window_name, fullscreen_img)
+            else:
+                # Display resized image directly
+                cv2.imshow(window_name, resized_img)
         else:
             # Fallback: display the frame directly if fullscreen size not set
             cv2.imshow(window_name, display_img)
@@ -655,6 +707,29 @@ class VideoInferenceApp:
         """Set the detection confidence threshold"""
         self.box_threshold = threshold
         logging.info(f"Box threshold set to {threshold}")
+    
+    def set_video_size_config(self, width: Optional[int] = None, height: Optional[int] = None,
+                             scale_mode: str = 'fit', maintain_aspect_ratio: bool = True,
+                             center_video: bool = True, scale_multiplier: float = 0.9) -> None:
+        """Set video size configuration"""
+        global DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_SCALE_MODE
+        global DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO, DEFAULT_VIDEO_CENTER_ON_SCREEN, DEFAULT_VIDEO_SCALE_MULTIPLIER
+        
+        if width is not None:
+            DEFAULT_VIDEO_WIDTH = width
+        if height is not None:
+            DEFAULT_VIDEO_HEIGHT = height
+        
+        DEFAULT_VIDEO_SCALE_MODE = scale_mode
+        DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO = maintain_aspect_ratio
+        DEFAULT_VIDEO_CENTER_ON_SCREEN = center_video
+        DEFAULT_VIDEO_SCALE_MULTIPLIER = scale_multiplier
+        
+        logging.info(f"Video size config updated: {DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT}, "
+                    f"scale_mode={DEFAULT_VIDEO_SCALE_MODE}, "
+                    f"maintain_aspect_ratio={DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO}, "
+                    f"center_video={DEFAULT_VIDEO_CENTER_ON_SCREEN}, "
+                    f"scale_multiplier={DEFAULT_VIDEO_SCALE_MULTIPLIER}")
     
     def get_box_threshold(self) -> float:
         """Get the current detection confidence threshold"""

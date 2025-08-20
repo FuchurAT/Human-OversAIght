@@ -36,9 +36,21 @@ DEFAULT_GRADCAM_ALPHA = 1
 # Video Settings
 DEFAULT_FPS = 25
 
+# Video Display Size Configuration
+# These settings control the size of the video display window
+# Set to None to use automatic screen size detection, or specify custom dimensions
+DEFAULT_VIDEO_WIDTH = None  # None = auto-detect, or specify width in pixels
+DEFAULT_VIDEO_HEIGHT = None  # None = auto-detect, or specify height in pixels
+
+# Video scaling behavior
+DEFAULT_VIDEO_SCALE_MODE = 'fit'  # 'fit', 'stretch', 'original'
+DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO = True  # Whether to maintain video aspect ratio
+DEFAULT_VIDEO_CENTER_ON_SCREEN = True  # Whether to center video on screen
+DEFAULT_VIDEO_SCALE_MULTIPLIER = 1  # How much of screen to use (0.95 = 95% of available space)
+
 # Window Settings
 DEFAULT_WINDOW_WIDTH = 1920
-DEFAULT_WINDOW_HEIGHT = 1080
+DEFAULT_WINDOW_HEIGHT = 800
 MIN_WINDOW_SIZE = 300
 
 # Legend Display

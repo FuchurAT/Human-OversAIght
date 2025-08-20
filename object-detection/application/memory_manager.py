@@ -7,7 +7,6 @@ import logging
 import torch
 import gc
 import psutil
-from typing import Optional
 
 from config.config import DEFAULT_MEMORY_CHECK_INTERVAL, DEFAULT_MEMORY_CLEANUP_INTERVAL
 

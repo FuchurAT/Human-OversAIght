@@ -75,7 +75,55 @@ def main() -> None:
         help="Maximum frames to process (0 = unlimited, default: 0)"
     )
     
+    parser.add_argument(
+        '--video-width', '-W',
+        type=int,
+        default=None,
+        help="Video display width in pixels (default: auto-detect from screen)"
+    )
+    
+    parser.add_argument(
+        '--video-height', '-H',
+        type=int,
+        default=None,
+        help="Video display height in pixels (default: auto-detect from screen)"
+    )
+    
+    parser.add_argument(
+        '--scale-mode',
+        type=str,
+        choices=['fit', 'stretch', 'original'],
+        default='fit',
+        help="Video scaling mode: fit (full screen with aspect ratio, default), stretch (full screen without aspect ratio), original (no scaling)"
+    )
+    
+    parser.add_argument(
+        '--scale-multiplier',
+        type=float,
+        default=0.95,
+        help="Scale multiplier for fit mode (0.1-1.0, default: 0.95 = 95% of screen)"
+    )
+    
+    parser.add_argument(
+        '--maintain-aspect-ratio',
+        action='store_true',
+        default=True,
+        help="Maintain video aspect ratio (default: True)"
+    )
+    
+    parser.add_argument(
+        '--center-video',
+        action='store_true',
+        default=True,
+        help="Center video on screen (default: True)"
+    )
+    
     args = parser.parse_args()
+    
+    # Validate arguments
+    if args.scale_multiplier < 0.1 or args.scale_multiplier > 1.0:
+        logging.error(f"Scale multiplier must be between 0.1 and 1.0, got: {args.scale_multiplier}")
+        sys.exit(1)
     
     # Validate paths
     if not Path(args.model).exists():
@@ -108,6 +156,16 @@ def main() -> None:
         if args.max_frames > 0:
             app_instance.max_frames = args.max_frames
         
+        # Set video size configuration
+        app_instance.set_video_size_config(
+            width=args.video_width,
+            height=args.video_height,
+            scale_mode=args.scale_mode,
+            maintain_aspect_ratio=args.maintain_aspect_ratio,
+            center_video=args.center_video,
+            scale_multiplier=args.scale_multiplier
+        )
+        
         logging.info(f"Starting Object Detection Application")
         logging.info(f"Model: {args.model}")
         logging.info(f"Video Directory: {args.video}")
@@ -116,6 +174,16 @@ def main() -> None:
             logging.info(f"Output: {args.output}")
         if args.max_frames > 0:
             logging.info(f"Max Frames: {args.max_frames}")
+        
+        # Log video size configuration
+        if args.video_width and args.video_height:
+            logging.info(f"Video Size: {args.video_width}x{args.video_height}")
+        else:
+            logging.info("Video Size: Auto-detect from screen")
+        logging.info(f"Scale Mode: {args.scale_mode}")
+        logging.info(f"Scale Multiplier: {args.scale_multiplier}")
+        logging.info(f"Maintain Aspect Ratio: {args.maintain_aspect_ratio}")
+        logging.info(f"Center Video: {args.center_video}")
         
         app_instance.run()
         

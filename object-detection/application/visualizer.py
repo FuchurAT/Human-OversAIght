@@ -6,7 +6,6 @@ import cv2
 import numpy as np
 import time
 import pygame
-import os
 from pathlib import Path
 from typing import Dict, Tuple, List
 from config.config import (
