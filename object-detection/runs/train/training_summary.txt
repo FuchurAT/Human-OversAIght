@@ -2,19 +2,19 @@ Armored Vehicles YOLO Training Summary
 ==================================================
 
 Model: yolov8s.pt
-Classes: ARMED_POLICEMEN, ATTACK, FIRE, FIRE_TRUCK, IMMIGRANT, MILITARY_OFFICER, MILITARY_SOLDIER, MILITARY_VEHICLE, POLICE, POLICE_VEHICLE, RIOT, RIOT_POLICE, TEARGAS, WEAPON
-Number of classes: 14
+Classes: ARMED_POLICEMEN, ATTACK, FIRE, FIRE_TRUCK, IMMIGRANT, MILITARY_OFFICER, MILITARY_SOLDIER, MILITARY_VEHICLE, POLICE, POLICE_VEHICLE, RIOT_POLICE, WEAPON
+Number of classes: 12
 Epochs: 100
 Batch size: 16
 Image size: 512
 Train/Val split ratio: 0.8
 Output directory: runs/train
 
-Total training time: 0:21:12
+Total training time: 0:16:53
 
 Final Metrics:
-  metrics/precision(B): 0.7048808668226787
-  metrics/recall(B): 0.4940473450692559
-  metrics/mAP50(B): 0.5513880800991676
-  metrics/mAP50-95(B): 0.5088393639531725
-  fitness: 0.513094235567772
+  metrics/precision(B): 0.7139313843715579
+  metrics/recall(B): 0.5232909207171557
+  metrics/mAP50(B): 0.5853409135341089
+  metrics/mAP50-95(B): 0.545019462282635
+  fitness: 0.5490516074077824

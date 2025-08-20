@@ -30,6 +30,16 @@ class GradCAMProcessor:
         
         # Initialize Grad-CAM explainer
         try:
+            # Patch torch.load to handle PyTorch 2.6+ security restrictions
+            import torch
+            original_load = torch.load
+            
+            def patched_load(*args, **kwargs):
+                kwargs['weights_only'] = False
+                return original_load(*args, **kwargs)
+            
+            torch.load = patched_load
+            
             from YOLOv8_Explainer import yolov8_heatmap
             self.cam_model = yolov8_heatmap(
                 weight=model_path,
@@ -105,46 +115,42 @@ class GradCAMProcessor:
             logging.warning("Received None frame in get_gradcam_image")
             return np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # Ensure buffer compatibility
-        self._ensure_buffer_compatibility(frame)
-        
         try:
-            # Ensure temp directory exists
-            temp_dir = os.path.dirname(self.temp_frame_path)
-            if temp_dir and not os.path.exists(temp_dir):
-                os.makedirs(temp_dir, exist_ok=True)
-            
             # Save frame to temp file
             cv2.imwrite(self.temp_frame_path, frame)
             
-            # Check if cam_model is available
-            if not hasattr(self, 'cam_model') or self.cam_model is None:
-                logging.warning("GradCAM model not available")
-                return frame.copy()
+            # Get GradCAM output
+            cam_images = self.cam_model(img_path=self.temp_frame_path)
             
-            try:
-                cam_images = self.cam_model(img_path=self.temp_frame_path)
-            except Exception as e:
-                logging.warning(f"GradCAM model inference failed: {e}")
-                return frame.copy()
-            
+            # Start with original frame
             gradcam_img = frame.copy()
             
             if isinstance(cam_images, list) and len(cam_images) > 0:
                 img_candidate = cam_images[0]
-                if isinstance(img_candidate, Image.Image):
-                    gradcam_img = np.array(img_candidate.convert("RGB"))
-                elif isinstance(img_candidate, np.ndarray):
-                    gradcam_img = img_candidate
                 
-                # Ensure the GradCAM image matches the frame dimensions
-                if isinstance(gradcam_img, np.ndarray) and gradcam_img.ndim >= 2:
-                    if gradcam_img.shape[:2] != frame.shape[:2]:
-                        gradcam_img = cv2.resize(gradcam_img, (frame.shape[1], frame.shape[0]))
+                if isinstance(img_candidate, Image.Image):
+                    # Convert PIL image to numpy array
+                    gradcam_heatmap = np.array(img_candidate.convert("RGB"))
+                elif isinstance(img_candidate, np.ndarray):
+                    gradcam_heatmap = img_candidate
                 else:
-                    gradcam_img = frame.copy()
-            else:
-                gradcam_img = frame.copy()
+                    return frame.copy()
+                
+                # Ensure the GradCAM heatmap matches the frame dimensions
+                if gradcam_heatmap.shape[:2] != frame.shape[:2]:
+                    gradcam_heatmap = cv2.resize(gradcam_heatmap, (frame.shape[1], frame.shape[0]))
+                
+                # Convert to float for proper blending
+                frame_float = frame.astype(np.float32) / 255.0
+                heatmap_float = gradcam_heatmap.astype(np.float32) / 255.0
+                
+                # Blend the heatmap with the original frame
+                # Use alpha blending: result = alpha * heatmap + (1 - alpha) * frame
+                alpha = 0.6  # Adjust this value to control overlay intensity
+                blended = alpha * heatmap_float + (1 - alpha) * frame_float
+                
+                # Convert back to uint8
+                gradcam_img = (blended * 255).astype(np.uint8)
                 
         except Exception as e:
             logging.warning(f"Grad-CAM generation failed: {e}")
@@ -164,62 +170,64 @@ class GradCAMProcessor:
             logging.warning("Received None frame in process_gradcam")
             return np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # Ensure buffer compatibility
-        self._ensure_buffer_compatibility(frame)
+        # Convert to grayscale and back to BGR (this was in the working code)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         
+        # Use gradcam buffer to avoid repeated allocations
+        if self.gradcam_buffer is None or self.gradcam_buffer.shape != frame.shape:
+            self.gradcam_buffer = np.zeros_like(frame)
+        
+        gradcam_img = self.gradcam_buffer.copy()
+        
+        # Skip Grad-CAM processing for performance (every N frames)
         self.frame_skip_counter += 1
-        
-        # Process GradCAM more frequently for better synchronization
         if self.frame_skip_counter % self.frame_skip_threshold == 0:
-            logging.debug(f"Processing GradCAM for frame (counter: {self.frame_skip_counter}, threshold: {self.frame_skip_threshold})")
             try:
-                if in_box_only and detections:
-                    # Process GradCAM for the entire frame first
-                    full_gradcam = self.get_gradcam_image(frame)
-                    
-                    # Create output image starting with the original frame
-                    gradcam_img = frame.copy()
-                    
-                    # Apply GradCAM only to detection regions
-                    for detection in detections:
-                        if detection.box is not None and len(detection.box) == 4:
-                            x1, y1, x2, y2 = detection.box
-                            
-                            # Ensure coordinates are within bounds
-                            x1 = max(0, min(x1, frame.shape[1] - 1))
-                            y1 = max(0, min(y1, frame.shape[0] - 1))
-                            x2 = max(x1 + 1, min(x2, frame.shape[1]))
-                            y2 = max(y1 + 1, min(y2, frame.shape[0]))
-                            
-                            # Extract regions
-                            frame_roi = frame[y1:y2, x1:x2]
-                            gradcam_roi = full_gradcam[y1:y2, x1:x2]
-                            
-                            # Ensure ROI shapes match
-                            if frame_roi.shape == gradcam_roi.shape and frame_roi.size > 0:
-                                gradcam_img[y1:y2, x1:x2] = gradcam_roi
-                                logging.debug(f"Applied GradCAM to detection box: ({x1}, {y1}) to ({x2}, {y2})")
-                else:
-                    # Use full GradCAM image
-                    gradcam_img = self.get_gradcam_image(frame)
+                # Sort detections by confidence, descending
+                sorted_detections = sorted(detections, key=lambda x: x.confidence, reverse=True)
+                selected_boxes = []
+                selected_confs = []
+                selected_classes = []
                 
-                # Update the last processed image
-                self.last_gradcam_img = gradcam_img.copy()
-                logging.debug(f"Updated last GradCAM image with shape: {self.last_gradcam_img.shape}")
+                for detection in detections:
+                    if detection.box is not None and len(detection.box) == 4:
+                        box = detection.box
+                        conf = detection.confidence
+                        class_id = detection.class_id
+                        
+                        # Check overlap with already selected boxes
+                        overlap = False
+                        for sel_box in selected_boxes:
+                            # Simple IoU check (you may need to implement this)
+                            if self._iou(box, sel_box) > 0.5:  # Default IoU threshold
+                                overlap = True
+                                break
+                        if not overlap:
+                            selected_boxes.append(box)
+                            selected_confs.append(conf)
+                            selected_classes.append(class_id)
+                
+                # Overlay Grad-CAM for each selected box
+                if in_box_only:
+                    gradcam_img = frame.copy()
+                    for box, conf, class_id in zip(selected_boxes, selected_confs, selected_classes):
+                        single_gradcam = self.get_gradcam_image(frame)
+                        x1, y1, x2, y2 = box
+                        gradcam_img[y1:y2, x1:x2] = single_gradcam[y1:y2, x1:x2]
+                else:
+                    gradcam_img = np.zeros_like(frame)
+                    for box, conf, class_id in zip(selected_boxes, selected_confs, selected_classes):
+                        single_gradcam = self.get_gradcam_image(frame)
+                        gradcam_img = np.maximum(gradcam_img, single_gradcam)
+                
+                self.last_gradcam_img = gradcam_img
                 
             except Exception as e:
-                logging.warning(f"Grad-CAM processing failed: {e}")
-                gradcam_img = self.last_gradcam_img if self.last_gradcam_img is not None else frame.copy()
+                logging.warning(f"Grad-CAM failed: {e}")
+                gradcam_img = self.last_gradcam_img if self.last_gradcam_img is not None else self.gradcam_buffer.copy()
         else:
-            # Use the last processed GradCAM image, but ensure it matches current frame
-            if (self.last_gradcam_img is not None and 
-                self.last_gradcam_img.shape == frame.shape):
-                gradcam_img = self.last_gradcam_img.copy()
-                logging.debug(f"Using cached GradCAM image (frame {self.frame_skip_counter})")
-            else:
-                # If shapes don't match, fall back to original frame
-                gradcam_img = frame.copy()
-                logging.debug(f"Shape mismatch, using original frame (frame {self.frame_skip_counter})")
+            gradcam_img = self.last_gradcam_img if self.last_gradcam_img is not None else self.gradcam_buffer.copy()
         
         return gradcam_img
     
@@ -252,4 +260,27 @@ class GradCAMProcessor:
         except Exception as e:
             logging.debug(f"Error during buffer cleanup: {e}")
         
-        logging.debug("Grad-CAM resources cleaned up") 
+        logging.debug("Grad-CAM resources cleaned up")
+    
+    def _iou(self, box1, box2):
+        """Calculate Intersection over Union between two bounding boxes"""
+        x1_1, y1_1, x2_1, y2_1 = box1
+        x1_2, y1_2, x2_2, y2_2 = box2
+        
+        # Calculate intersection coordinates
+        x1_i = max(x1_1, x1_2)
+        y1_i = max(y1_1, y1_2)
+        x2_i = min(x2_1, x2_2)
+        y2_i = min(y2_1, y2_2)
+        
+        # Check if there is intersection
+        if x2_i <= x1_i or y2_i <= y1_i:
+            return 0.0
+        
+        # Calculate areas
+        intersection = (x2_i - x1_i) * (y2_i - y1_i)
+        area1 = (x2_1 - x1_1) * (y2_1 - y1_1)
+        area2 = (x2_2 - x1_2) * (y2_2 - y1_2)
+        union = area1 + area2 - intersection
+        
+        return intersection / union if union > 0 else 0.0 

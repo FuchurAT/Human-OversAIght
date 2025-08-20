@@ -366,6 +366,10 @@ class VideoInferenceApp:
 
                 # Reset GradCAM state for new video
                 self._reset_gradcam_state()
+                
+                # Ensure audio is initialized for new video
+                if hasattr(self, 'visualizer'):
+                    self.visualizer.reinitialize_audio()
 
                 # Setup video properties
                 fps = cap.get(cv2.CAP_PROP_FPS)
@@ -484,6 +488,9 @@ class VideoInferenceApp:
                             self._cleanup_resources()
                             # Reset GradCAM state for next video
                             self._reset_gradcam_state()
+                            # Reinitialize audio for next video
+                            if hasattr(self, 'visualizer'):
+                                self.visualizer.reinitialize_audio()
                             break
                         
                         self.visualizer.frame_idx += 1

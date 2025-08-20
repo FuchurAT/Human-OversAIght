@@ -37,6 +37,12 @@ class ButtonHandler:
         self.last_button_press_time = [0.0] * 48
         self.debounce_delay = self.config.get('debounce_time', 100) / 1000.0  # Convert ms to seconds
         
+        # Connection monitoring
+        self.last_heartbeat = time.time()
+        self.heartbeat_interval = 5.0  # Check connection every 5 seconds
+        self.connection_errors = 0
+        self.max_connection_errors = 3
+        
         logging.info("ButtonHandler initialized")
     
     def _setup_action_callbacks(self):
@@ -92,9 +98,41 @@ class ButtonHandler:
             'emergency_stop': self._action_emergency_stop,
         }
     
+    def check_serial_port_availability(self) -> bool:
+        """Check if the configured serial port is available"""
+        try:
+            import os
+            port_path = self.config.get('serial_port', '/dev/ttyACM0')
+            
+            if not os.path.exists(port_path):
+                logging.error(f"Serial port {port_path} does not exist")
+                return False
+            
+            # Try to open the port briefly to test access
+            test_ser = serial.Serial(
+                port_path,
+                self.config.get('baud_rate', 115200),
+                timeout=0.1
+            )
+            test_ser.close()
+            logging.info(f"Serial port {port_path} is available and accessible")
+            return True
+            
+        except (serial.SerialException, OSError) as e:
+            logging.error(f"Serial port {port_path} is not accessible: {e}")
+            return False
+        except Exception as e:
+            logging.error(f"Error checking serial port availability: {e}")
+            return False
+    
     def start_serial_monitoring(self):
         """Start monitoring serial port for button inputs"""
         try:
+            # Check port availability first
+            if not self.check_serial_port_availability():
+                logging.error("Cannot start button monitoring - serial port unavailable")
+                return False
+            
             self.is_running = True
             self.serial_thread = threading.Thread(
                 target=self._serial_monitor_loop,
@@ -102,24 +140,68 @@ class ButtonHandler:
             )
             self.serial_thread.start()
             logging.info(f"Started button monitoring on {self.config['serial_port']}")
+            return True
+            
         except ImportError:
             logging.error("pyserial not installed. Please install it: pip install pyserial")
+            return False
         except Exception as e:
             logging.error(f"Failed to start button monitoring: {e}")
+            return False
     
     def _serial_monitor_loop(self):
         """Main loop for monitoring serial port - simplified like mega_48_buttons_read.py"""
         
         while self.is_running:
             try:
-                with serial.Serial(self.config['serial_port'], self.config['baud_rate'], timeout=0.1) as ser:
-                    while self.is_running:
+                # Create persistent serial connection
+                ser = serial.Serial(
+                    self.config['serial_port'], 
+                    self.config['baud_rate'], 
+                    timeout=0.1
+                )
+                logging.info(f"Serial connection established on {self.config['serial_port']}")
+                self.connection_errors = 0  # Reset error counter on successful connection
+                
+                # Monitor serial data with persistent connection
+                while self.is_running and ser.is_open:
+                    try:
+                        # Check heartbeat
+                        current_time = time.time()
+                        if current_time - self.last_heartbeat >= self.heartbeat_interval:
+                            self._check_connection_health(ser)
+                            self.last_heartbeat = current_time
+                        
                         line = ser.readline().decode('ascii', errors='replace').strip()
                         if line:
                             self._process_serial_line(line)
-            except Exception as e:
+                    except (serial.SerialException, OSError) as e:
+                        logging.error(f"Serial read error: {e}")
+                        self.connection_errors += 1
+                        break
+                    except Exception as e:
+                        logging.error(f"Unexpected error in serial read: {e}")
+                        self.connection_errors += 1
+                        break
+                
+                # Close connection before retrying
+                if ser.is_open:
+                    ser.close()
+                    
+            except (serial.SerialException, OSError) as e:
                 logging.error(f"Serial connection error: {e}")
+                self.connection_errors += 1
                 time.sleep(1.0)  # Wait before retrying
+            except Exception as e:
+                logging.error(f"Unexpected error in serial monitoring: {e}")
+                self.connection_errors += 1
+                time.sleep(1.0)  # Wait before retrying
+            
+            # Check if we should force a restart after too many errors
+            if self.connection_errors >= self.max_connection_errors:
+                logging.warning(f"Too many connection errors ({self.connection_errors}), forcing restart...")
+                time.sleep(2.0)  # Wait longer before restart
+                self.connection_errors = 0  # Reset counter
     
     def _process_serial_line(self, line: str):
         """Process incoming serial data and update button states - simplified like mega_48_buttons_read.py"""
@@ -155,6 +237,11 @@ class ButtonHandler:
                         self._show_button_feedback(button_id)
                 except Exception as e:
                     logging.error(f"Error executing button action {action_name}: {e}")
+                    # Don't let button action errors stop the serial monitoring
+                    import traceback
+                    logging.debug(f"Button action traceback: {traceback.format_exc()}")
+            else:
+                logging.warning(f"Button action '{action_name}' has no callback implementation")
         else:
             logging.debug(f"Button {button_id} pressed but not mapped to any action")
     
@@ -412,6 +499,19 @@ class ButtonHandler:
             self.serial_thread.join(timeout=1.0)
         logging.info("ButtonHandler stopped")
     
+    def is_connected(self) -> bool:
+        """Check if serial connection is active"""
+        return self.is_running and self.serial_thread and self.serial_thread.is_alive()
+    
+    def get_connection_status(self) -> dict:
+        """Get detailed connection status"""
+        return {
+            'is_running': self.is_running,
+            'thread_alive': self.serial_thread.is_alive() if self.serial_thread else False,
+            'serial_port': self.config.get('serial_port', 'Unknown'),
+            'baud_rate': self.config.get('baud_rate', 'Unknown')
+        }
+    
     def get_button_state(self, button_id: int) -> bool:
         """Get current state of a button"""
         if 0 <= button_id < 48:
@@ -458,3 +558,85 @@ class ButtonHandler:
         self.config.update(new_config)
         self.debounce_delay = self.config.get('debounce_time', 100) / 1000.0
         logging.info(f"ButtonHandler config updated, debounce delay: {self.debounce_delay}s")
+
+    def restart_connection(self):
+        """Restart the serial connection"""
+        logging.info("Restarting serial connection...")
+        self.stop()
+        time.sleep(0.5)  # Brief pause before restarting
+        self.start_serial_monitoring()
+        logging.info("Serial connection restart completed")
+    
+    def force_reconnect(self):
+        """Force a reconnection by stopping and starting the monitoring"""
+        if self.is_running:
+            logging.info("Forcing serial reconnection...")
+            self.restart_connection()
+        else:
+            logging.warning("Cannot force reconnect - monitoring is not running")
+
+    def _check_connection_health(self, ser):
+        """Check if the serial connection is still healthy"""
+        try:
+            if not ser.is_open:
+                logging.warning("Serial connection is closed")
+                return False
+            
+            # Try to read a small amount of data to test connection
+            if ser.in_waiting > 0:
+                # Data is available, connection is healthy
+                return True
+            else:
+                # No data, but connection might still be healthy
+                return True
+                
+        except Exception as e:
+            logging.error(f"Connection health check failed: {e}")
+            return False
+    
+    def get_connection_health(self) -> dict:
+        """Get detailed connection health information"""
+        return {
+            'is_running': self.is_running,
+            'thread_alive': self.serial_thread.is_alive() if self.serial_thread else False,
+            'connection_errors': self.connection_errors,
+            'max_connection_errors': self.max_connection_errors,
+            'last_heartbeat': self.last_heartbeat,
+            'heartbeat_interval': self.heartbeat_interval,
+            'serial_port': self.config.get('serial_port', 'Unknown'),
+            'baud_rate': self.config.get('baud_rate', 'Unknown')
+        }
+
+    def test_button_functionality(self, button_id: int = 0):
+        """Test button functionality by simulating a button press"""
+        if 0 <= button_id < 48:
+            logging.info(f"Testing button {button_id} functionality...")
+            self._handle_button_press(button_id)
+            return True
+        else:
+            logging.error(f"Invalid button ID: {button_id}")
+            return False
+    
+    def debug_button_states(self):
+        """Print debug information about all button states"""
+        logging.info("=== Button Handler Debug Info ===")
+        logging.info(f"Running: {self.is_running}")
+        logging.info(f"Thread alive: {self.serial_thread.is_alive() if self.serial_thread else False}")
+        logging.info(f"Connection errors: {self.connection_errors}")
+        logging.info(f"Last heartbeat: {time.time() - self.last_heartbeat:.1f}s ago")
+        
+        # Show first few button states
+        active_buttons = [i for i, state in enumerate(self.button_states) if state]
+        if active_buttons:
+            logging.info(f"Active buttons: {active_buttons}")
+        else:
+            logging.info("No active buttons")
+        
+        # Show button mappings
+        logging.info(f"Button mappings configured: {len(BUTTON_MAPPING)}")
+        for btn_id, mapping in list(BUTTON_MAPPING.items())[:5]:  # Show first 5
+            logging.info(f"  Button {btn_id}: {mapping}")
+        if len(BUTTON_MAPPING) > 5:
+            logging.info(f"  ... and {len(BUTTON_MAPPING) - 5} more")
+        
+        logging.info("=== End Debug Info ===")

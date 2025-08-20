@@ -35,37 +35,45 @@ class DetectionVisualizer:
         self.last_inf_text = "Inference: 0.0 ms"
         
         # Initialize pygame mixer for audio playback
+        self.audio_available = False
+        self.vocal_sound = None
+        self.ambient_sounds = {}
+        self.current_ambient = None
+        self.ambient_volume = 0.3  # Default volume for ambient sounds
+        self.ambient_cycle_timer = 0
+        self.ambient_cycle_interval = 30  # Cycle every 30 seconds
+        self.ambient_sound_index = 0
+        
         try:
             pygame.mixer.init()
             self.audio_available = True
+            print("Pygame mixer initialized successfully")
         except Exception as e:
             print(f"Warning: Could not initialize pygame mixer: {e}")
-            self.audio_available = False
-            return
+            # Try alternative audio drivers
+            try:
+                pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+                self.audio_available = True
+                print("Pygame mixer initialized with alternative settings")
+            except Exception as e2:
+                print(f"Alternative initialization also failed: {e2}")
+                self.audio_available = False
         
         # Get the path to vocal.wav relative to the project root
         project_root = Path(__file__).parent.parent.parent
-        self.vocal_sound_path = project_root / "assets" / "sounds" /  "buttons" / "vocal.wav"
+        self.vocal_sound_path = project_root / "assets" / "sounds" / "buttons" / "vocal.wav"
         
-        # Initialize button sound
-        if self.vocal_sound_path.exists():
+        # Initialize button sound (only if audio is available)
+        if self.audio_available and self.vocal_sound_path.exists():
             try:
                 self.vocal_sound = pygame.mixer.Sound(str(self.vocal_sound_path))
                 print("Button sound (vocal.wav) loaded successfully")
             except Exception as e:
                 print(f"Warning: Could not load button sound: {e}")
                 self.vocal_sound = None
-        else:
-            print(f"Warning: vocal.wav not found at {self.vocal_sound_path}")
-            self.vocal_sound = None
         
         # Initialize ambient sound paths
         self.ambient_sounds_dir = project_root / "assets" / "sounds" / "ambient"
-        self.ambient_sounds = {}
-        self.current_ambient = None
-        self.ambient_volume = 0.3  # Default volume for ambient sounds
-        self.ambient_cycle_timer = 0
-        self.ambient_cycle_interval = 30  # Cycle every 30 seconds
         
         # Load ambient sound files (only if audio is available)
         if self.audio_available:
@@ -79,6 +87,12 @@ class DetectionVisualizer:
         
         if not self.audio_available:
             print("Audio not available, skipping ambient sound loading")
+            return
+        
+        # Additional safety check
+        if not self.is_audio_safe():
+            print("Audio not safe, disabling audio functionality")
+            self.disable_audio()
             return
             
         if not self.ambient_sounds_dir.exists():
@@ -127,13 +141,16 @@ class DetectionVisualizer:
             print("No ambient sounds available")
             return False
         
-        try:
+        def _start_sound():
             # Stop any currently playing ambient sound
             self.stop_ambient_sound()
             
             # If no specific sound specified, use the first available one
             if sound_name is None:
-                sound_name = list(self.ambient_sounds.keys())[0]
+                if not self.ambient_sounds:
+                    print("No ambient sounds loaded")
+                    return False
+                sound_name = sound_name or list(self.ambient_sounds.keys())[0]
             
             if sound_name not in self.ambient_sounds:
                 print(f"Ambient sound '{sound_name}' not found. Available: {list(self.ambient_sounds.keys())}")
@@ -159,14 +176,12 @@ class DetectionVisualizer:
             
             print(f"Started ambient sound: {sound_name} (volume: {self.ambient_volume:.2f})")
             return True
-            
-        except Exception as e:
-            print(f"Error starting ambient sound: {e}")
-            return False
+        
+        return self._safe_audio_operation("start_ambient_sound", _start_sound)
     
     def stop_ambient_sound(self) -> None:
         """Stop the currently playing ambient sound"""
-        if self.audio_available and self.current_ambient:
+        if self.audio_available and self.current_ambient and self.is_audio_safe():
             try:
                 # Stop the current ambient sound
                 if self.current_ambient in self.ambient_sounds:
@@ -178,7 +193,7 @@ class DetectionVisualizer:
     
     def set_ambient_volume(self, volume: float) -> None:
         """Set the volume of ambient sounds (0.0 to 1.0)"""
-        if not self.audio_available:
+        if not self.audio_available or not self.is_audio_safe():
             return
             
         try:
@@ -200,7 +215,7 @@ class DetectionVisualizer:
     
     def is_ambient_playing(self) -> bool:
         """Check if ambient sound is currently playing"""
-        if not self.audio_available or not self.current_ambient:
+        if not self.audio_available or not self.current_ambient or not self.is_audio_safe():
             return False
         try:
             # Check if the current ambient sound is playing
@@ -212,7 +227,7 @@ class DetectionVisualizer:
     
     def cycle_to_next_ambient_sound(self) -> bool:
         """Manually cycle to the next ambient sound in the sequence"""
-        if not self.audio_available or not self.ambient_sounds:
+        if not self.audio_available or not self.ambient_sounds or not self.is_audio_safe():
             return False
             
         try:
@@ -232,7 +247,7 @@ class DetectionVisualizer:
     
     def auto_cycle_ambient_sounds(self) -> None:
         """Automatically cycle to the next ambient sound after a certain duration"""
-        if not self.audio_available or not self.ambient_sounds:
+        if not self.audio_available or not self.ambient_sounds or not self.is_audio_safe():
             return
             
         try:
@@ -245,16 +260,26 @@ class DetectionVisualizer:
                 self.start_ambient_sound(next_sound)
         except Exception as e:
             print(f"Error auto-cycling ambient sounds: {e}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
     
     def check_ambient_cycle_timer(self, delta_time: float = 1.0) -> None:
         """Check if it's time to cycle ambient sounds based on timer"""
         if not self.audio_available or not self.ambient_sounds:
             return
             
-        self.ambient_cycle_timer += delta_time
-        if self.ambient_cycle_timer >= self.ambient_cycle_interval:
+        # Check and fix audio state if needed
+        if not self.is_audio_safe():
+            return
+            
+        try:
+            self.ambient_cycle_timer += delta_time
+            if self.ambient_cycle_timer >= self.ambient_cycle_interval:
+                self.ambient_cycle_timer = 0
+                self.auto_cycle_ambient_sounds()
+        except Exception as e:
+            print(f"Error in ambient cycle timer: {e}")
             self.ambient_cycle_timer = 0
-            self.auto_cycle_ambient_sounds()
     
     def get_ambient_sound_info(self) -> dict:
         """Get information about the current ambient sound sequence"""
@@ -275,10 +300,18 @@ class DetectionVisualizer:
         if not self.audio_available or not self.ambient_sounds:
             return
             
+        # Check and fix audio state if needed
+        if not self.is_audio_safe():
+            return
+            
         if not self.is_ambient_playing() and self.current_ambient:
             # Restart the current ambient sound
             print(f"Ambient sound stopped, restarting: {self.current_ambient}")
-            self.start_ambient_sound(self.current_ambient)
+            try:
+                self.start_ambient_sound(self.current_ambient)
+            except Exception as e:
+                print(f"Error restarting ambient sound: {e}")
+                self.current_ambient = None
     
     def draw_detection_overlays(self, frame: np.ndarray, detections: List[Detection]) -> None:
         """Draw detection overlays on the frame"""
@@ -470,8 +503,12 @@ class DetectionVisualizer:
                 self.display_config.color_state = 'red'
             self.display_config.show_enemy = not self.display_config.show_enemy
             self.display_config.solid_border = not self.display_config.solid_border
-            if self.audio_available and self.vocal_sound:
-                self.vocal_sound.play()
+            if self.audio_available and self.vocal_sound and self.is_audio_safe():
+                try:
+                    self.vocal_sound.play()
+                except Exception as e:
+                    print(f"Error playing vocal sound: {e}")
+                    self.disable_audio()
         elif key == ord('g') and ENABLE_GRAD_CAM_VIEW:  # 'g' key to toggle Grad-CAM
             if app_instance:
                 app_instance.display_config.gradcam_enabled = not app_instance.display_config.gradcam_enabled
@@ -500,6 +537,91 @@ class DetectionVisualizer:
             try:
                 # Stop ambient sounds first
                 self.stop_ambient_sound()
-                pygame.mixer.quit()
+                # Don't quit the mixer completely - just stop sounds
+                # pygame.mixer.quit()  # Commented out to allow reuse
             except Exception as e:
-                print(f"Warning: Error cleaning up audio: {e}") 
+                print(f"Warning: Error cleaning up audio: {e}")
+    
+    def reinitialize_audio(self) -> bool:
+        """Reinitialize pygame mixer after cleanup"""
+        try:
+            # Check if mixer is already initialized
+            if hasattr(pygame.mixer, 'get_init') and pygame.mixer.get_init():
+                print("Pygame mixer already initialized")
+                self.audio_available = True
+                return True
+            
+            # Try to initialize mixer
+            try:
+                pygame.mixer.init()
+                self.audio_available = True
+                print("Pygame mixer reinitialized successfully")
+            except Exception as e:
+                print(f"Standard reinitialization failed: {e}")
+                # Try alternative settings
+                pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+                self.audio_available = True
+                print("Pygame mixer reinitialized with alternative settings")
+            
+            # Reload ambient sounds
+            if self.ambient_sounds_dir.exists():
+                self._load_ambient_sounds()
+            
+            return True
+            
+        except Exception as e:
+            print(f"Warning: Could not reinitialize pygame mixer: {e}")
+            self.audio_available = False
+            return False
+    
+    def _safe_audio_operation(self, operation_name: str, operation_func, *args, **kwargs):
+        """Safely execute audio operations with automatic recovery"""
+        try:
+            if not self.is_audio_safe():
+                if not self.reinitialize_audio():
+                    print(f"Cannot perform {operation_name} - audio not available")
+                    return False
+            return operation_func(*args, **kwargs)
+        except Exception as e:
+            print(f"Error in {operation_name}: {e}")
+            # Try to recover
+            if self.reinitialize_audio():
+                try:
+                    return operation_func(*args, **kwargs)
+                except Exception as e2:
+                    print(f"Recovery failed for {operation_name}: {e2}")
+                    self.disable_audio()
+                    return False
+            else:
+                self.disable_audio()
+                return False
+    
+    def disable_audio(self) -> None:
+        """Safely disable audio functionality to prevent crashes"""
+        print("Disabling audio functionality to prevent crashes")
+        self.audio_available = False
+        self.current_ambient = None
+        self.ambient_sounds = {}
+        self.vocal_sound = None
+        try:
+            pygame.mixer.quit()
+        except Exception as e:
+            print(f"Warning: Error quitting pygame mixer: {e}")
+    
+    def is_audio_safe(self) -> bool:
+        """Check if audio is safe to use"""
+        if not self.audio_available:
+            return False
+        try:
+            # Test if pygame mixer is still working
+            if hasattr(pygame.mixer, 'get_init') and pygame.mixer.get_init():
+                return True
+            else:
+                print("Pygame mixer not properly initialized")
+                # Try to reinitialize automatically
+                if self.reinitialize_audio():
+                    return True
+                return False
+        except Exception as e:
+            print(f"Audio safety check failed: {e}")
+            return False 

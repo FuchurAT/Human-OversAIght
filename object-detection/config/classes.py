@@ -5,7 +5,7 @@ CLASSES = {
    # "FIREFIGHTER": ["Person in firefighting gear", "Firefighter"],
     "FIRE_TRUCK": ["Firefighting vehicle, fire brigade truck"],
    # "HEALTH_AMBULANCE": ["Emergency medical vehicle, ambulance"],
-    "IMMIGRANT": ["Group or individual in transit or migration context"],
+    "IMMIGRANT": ["Group in transit or migration context"],
     "MILITARY_OFFICER": ["Military personnel with rank insignia"],
     "MILITARY_SOLDIER": ["Army soldier in uniform"],
     "MILITARY_VEHICLE": ["Armored military vehicle, tank"],
@@ -13,8 +13,8 @@ CLASSES = {
     "POLICE_VEHICLE": ["Police vehicle", "Police car", "Police Truck"],
     # "PRISON": ["Incarceration facility or prison structure"],
     # "PROTEST": ["Crowd demonstrating with signs or banners"],
-    "RIOT": ["Violent or chaotic protest scene"],
+    #"RIOT": ["Violent or chaotic protest scene"],
     "RIOT_POLICE": ["Police in riot gear, shields, and helmets"],
-    "TEARGAS": ["Cloud of gas or tear gas canister in crowd"],
+    #"TEARGAS": ["Cloud of gas or tear gas canister in crowd"],
     "WEAPON": ["police gun", "police weapon", "rifle", "military gun"]
 }
