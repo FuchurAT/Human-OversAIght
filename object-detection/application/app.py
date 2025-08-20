@@ -23,6 +23,7 @@ from application.box_manager import BoxManager
 from application.gradcam_processor import GradCAMProcessor
 from application.visualizer import DetectionVisualizer
 from application.color_manager import ColorManager
+from application.button_handler import ButtonHandler
 
 try:
     from screeninfo import get_monitors
@@ -62,12 +63,17 @@ class VideoInferenceApp:
         # Initialize visualizer
         self.visualizer = DetectionVisualizer(self.display_config, list(CLASSES.keys()))
         
+        # Initialize button handler
+        self.button_handler = ButtonHandler(self)
+        self.button_handler.start_serial_monitoring()
+        
         # Log initialization status
         logging.info(f"VideoInferenceApp initialized successfully")
         logging.info(f"  Model: {self.model_path}")
         logging.info(f"  Video path: {self.video_path}")
         logging.info(f"  Box threshold: {self.box_threshold}")
         logging.info(f"  GradCAM enabled: {self.gradcam_processor.is_model_loaded() if self.gradcam_processor is not None else False}")
+        logging.info(f"  Button handler enabled: {self.button_handler.is_running}")
     
     def _initialize_model(self) -> None:
         """Initialize the YOLO model with proper error handling"""
@@ -318,6 +324,10 @@ class VideoInferenceApp:
             # Clean up visualizer audio resources
             if hasattr(self, 'visualizer'):
                 self.visualizer.cleanup_audio()
+            
+            # Clean up button handler
+            if hasattr(self, 'button_handler'):
+                self.button_handler.stop()
             
             logging.info("Resource cleanup completed")
             
