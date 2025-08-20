@@ -315,6 +315,10 @@ class VideoInferenceApp:
             if self.gradcam_processor is not None:
                 self.gradcam_processor.cleanup()
             
+            # Clean up visualizer audio resources
+            if hasattr(self, 'visualizer'):
+                self.visualizer.cleanup_audio()
+            
             logging.info("Resource cleanup completed")
             
         except Exception as e:
@@ -467,6 +471,10 @@ class VideoInferenceApp:
                             break
                         
                         self.visualizer.frame_idx += 1
+                        
+                        # Ensure ambient sounds are playing and check for cycling
+                        self.visualizer.ensure_ambient_playing()
+                        self.visualizer.check_ambient_cycle_timer()
                         
                         # Write to output video
                         if out_writer:

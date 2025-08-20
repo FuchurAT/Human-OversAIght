@@ -5,6 +5,9 @@ Visualization utilities for the object detection application.
 import cv2
 import numpy as np
 import time
+import pygame
+import os
+from pathlib import Path
 from typing import Dict, Tuple, List
 from config.config import (
     DEFAULT_ANIMATION_ALPHA, DEFAULT_CORNER_LENGTH, DEFAULT_EDGE_MID_LENGTH,
@@ -30,6 +33,252 @@ class DetectionVisualizer:
         self.current_fps = 0
         self.last_fps_text = "FPS: 0.0"
         self.last_inf_text = "Inference: 0.0 ms"
+        
+        # Initialize pygame mixer for audio playback
+        try:
+            pygame.mixer.init()
+            self.audio_available = True
+        except Exception as e:
+            print(f"Warning: Could not initialize pygame mixer: {e}")
+            self.audio_available = False
+            return
+        
+        # Get the path to vocal.wav relative to the project root
+        project_root = Path(__file__).parent.parent.parent
+        self.vocal_sound_path = project_root / "assets" / "sounds" /  "buttons" / "vocal.wav"
+        
+        # Initialize button sound
+        if self.vocal_sound_path.exists():
+            try:
+                self.vocal_sound = pygame.mixer.Sound(str(self.vocal_sound_path))
+                print("Button sound (vocal.wav) loaded successfully")
+            except Exception as e:
+                print(f"Warning: Could not load button sound: {e}")
+                self.vocal_sound = None
+        else:
+            print(f"Warning: vocal.wav not found at {self.vocal_sound_path}")
+            self.vocal_sound = None
+        
+        # Initialize ambient sound paths
+        self.ambient_sounds_dir = project_root / "assets" / "sounds" / "ambient"
+        self.ambient_sounds = {}
+        self.current_ambient = None
+        self.ambient_volume = 0.3  # Default volume for ambient sounds
+        self.ambient_cycle_timer = 0
+        self.ambient_cycle_interval = 30  # Cycle every 30 seconds
+        
+        # Load ambient sound files (only if audio is available)
+        if self.audio_available:
+            self._load_ambient_sounds()
+    
+    def _load_ambient_sounds(self) -> None:
+        """Load all available ambient sound files"""
+        print(f"Loading ambient sounds from: {self.ambient_sounds_dir}")
+        print(f"Directory exists: {self.ambient_sounds_dir.exists()}")
+        print(f"Audio available: {self.audio_available}")
+        
+        if not self.audio_available:
+            print("Audio not available, skipping ambient sound loading")
+            return
+            
+        if not self.ambient_sounds_dir.exists():
+            print(f"Ambient sounds directory does not exist: {self.ambient_sounds_dir}")
+            return
+            
+        try:
+            # List all files in the directory
+            all_files = list(self.ambient_sounds_dir.iterdir())
+            print(f"All files in ambient directory: {[f.name for f in all_files]}")
+            
+            # Load all .wav files from the ambient directory
+            wav_files = list(self.ambient_sounds_dir.glob("*.wav"))
+            print(f"Found WAV files: {[f.name for f in wav_files]}")
+            
+            for sound_file in wav_files:
+                try:
+                    sound_name = sound_file.stem
+                    print(f"Attempting to load: {sound_file}")
+                    # Load as pygame.mixer.Sound for compatibility
+                    self.ambient_sounds[sound_name] = pygame.mixer.Sound(str(sound_file))
+                    print(f"Successfully loaded ambient sound: {sound_name}")
+                except Exception as e:
+                    print(f"Warning: Could not load ambient sound {sound_file.name}: {e}")
+            
+            print(f"Loaded {len(self.ambient_sounds)} ambient sound(s)")
+            print(f"Ambient sounds loaded: {list(self.ambient_sounds.keys())}")
+            
+            # Automatically start playing the first available ambient sound
+            if self.ambient_sounds:
+                self.ambient_sound_index = 0
+                first_sound = list(self.ambient_sounds.keys())[0]
+                print(f"Starting first ambient sound: {first_sound}")
+                self.start_ambient_sound(first_sound)
+            else:
+                print("No ambient sounds loaded, cannot start playback")
+            
+        except Exception as e:
+            print(f"Warning: Error loading ambient sounds: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def start_ambient_sound(self, sound_name: str = None, volume: float = None) -> bool:
+        """Start playing ambient sound in background loop"""
+        if not self.audio_available or not self.ambient_sounds:
+            print("No ambient sounds available")
+            return False
+        
+        try:
+            # Stop any currently playing ambient sound
+            self.stop_ambient_sound()
+            
+            # If no specific sound specified, use the first available one
+            if sound_name is None:
+                sound_name = list(self.ambient_sounds.keys())[0]
+            
+            if sound_name not in self.ambient_sounds:
+                print(f"Ambient sound '{sound_name}' not found. Available: {list(self.ambient_sounds.keys())}")
+                return False
+            
+            sound_object = self.ambient_sounds[sound_name]
+            
+            # Set volume if specified
+            if volume is not None:
+                self.ambient_volume = max(0.0, min(1.0, volume))
+            
+            # Set volume for the sound object
+            sound_object.set_volume(self.ambient_volume)
+            
+            # Play the ambient sound in a loop
+            sound_object.play(-1)  # -1 means loop indefinitely
+            
+            self.current_ambient = sound_name
+            # Update the index to match the current sound
+            if sound_name in self.ambient_sounds:
+                sound_names = list(self.ambient_sounds.keys())
+                self.ambient_sound_index = sound_names.index(sound_name)
+            
+            print(f"Started ambient sound: {sound_name} (volume: {self.ambient_volume:.2f})")
+            return True
+            
+        except Exception as e:
+            print(f"Error starting ambient sound: {e}")
+            return False
+    
+    def stop_ambient_sound(self) -> None:
+        """Stop the currently playing ambient sound"""
+        if self.audio_available and self.current_ambient:
+            try:
+                # Stop the current ambient sound
+                if self.current_ambient in self.ambient_sounds:
+                    self.ambient_sounds[self.current_ambient].stop()
+                print(f"Stopped ambient sound: {self.current_ambient}")
+                self.current_ambient = None
+            except Exception as e:
+                print(f"Error stopping ambient sound: {e}")
+    
+    def set_ambient_volume(self, volume: float) -> None:
+        """Set the volume of ambient sounds (0.0 to 1.0)"""
+        if not self.audio_available:
+            return
+            
+        try:
+            self.ambient_volume = max(0.0, min(1.0, volume))
+            # Update volume for all ambient sounds
+            for sound_object in self.ambient_sounds.values():
+                sound_object.set_volume(self.ambient_volume)
+            print(f"Ambient sound volume set to: {self.ambient_volume:.2f}")
+        except Exception as e:
+            print(f"Error setting ambient sound volume: {e}")
+    
+    def get_available_ambient_sounds(self) -> List[str]:
+        """Get list of available ambient sound names"""
+        return list(self.ambient_sounds.keys())
+    
+    def get_current_ambient_sound(self) -> str:
+        """Get the name of the currently playing ambient sound"""
+        return self.current_ambient
+    
+    def is_ambient_playing(self) -> bool:
+        """Check if ambient sound is currently playing"""
+        if not self.audio_available or not self.current_ambient:
+            return False
+        try:
+            # Check if the current ambient sound is playing
+            if self.current_ambient in self.ambient_sounds:
+                return self.ambient_sounds[self.current_ambient].get_num_channels() > 0
+            return False
+        except:
+            return False
+    
+    def cycle_to_next_ambient_sound(self) -> bool:
+        """Manually cycle to the next ambient sound in the sequence"""
+        if not self.audio_available or not self.ambient_sounds:
+            return False
+            
+        try:
+            sound_names = list(self.ambient_sounds.keys())
+            if len(sound_names) > 1:
+                # Move to next sound, wrap around to beginning
+                self.ambient_sound_index = (self.ambient_sound_index + 1) % len(sound_names)
+                next_sound = sound_names[self.ambient_sound_index]
+                print(f"Manually cycling to next ambient sound: {next_sound}")
+                return self.start_ambient_sound(next_sound)
+            else:
+                print("Only one ambient sound available, cannot cycle")
+                return False
+        except Exception as e:
+            print(f"Error cycling to next ambient sound: {e}")
+            return False
+    
+    def auto_cycle_ambient_sounds(self) -> None:
+        """Automatically cycle to the next ambient sound after a certain duration"""
+        if not self.audio_available or not self.ambient_sounds:
+            return
+            
+        try:
+            sound_names = list(self.ambient_sounds.keys())
+            if len(sound_names) > 1:
+                # Move to next sound, wrap around to beginning
+                self.ambient_sound_index = (self.ambient_sound_index + 1) % len(sound_names)
+                next_sound = sound_names[self.ambient_sound_index]
+                print(f"Auto-cycling to next ambient sound: {next_sound}")
+                self.start_ambient_sound(next_sound)
+        except Exception as e:
+            print(f"Error auto-cycling ambient sounds: {e}")
+    
+    def check_ambient_cycle_timer(self, delta_time: float = 1.0) -> None:
+        """Check if it's time to cycle ambient sounds based on timer"""
+        if not self.audio_available or not self.ambient_sounds:
+            return
+            
+        self.ambient_cycle_timer += delta_time
+        if self.ambient_cycle_timer >= self.ambient_cycle_interval:
+            self.ambient_cycle_timer = 0
+            self.auto_cycle_ambient_sounds()
+    
+    def get_ambient_sound_info(self) -> dict:
+        """Get information about the current ambient sound sequence"""
+        if not self.audio_available or not self.ambient_sounds:
+            return {}
+            
+        sound_names = list(self.ambient_sounds.keys())
+        return {
+            'total_sounds': len(sound_names),
+            'current_index': getattr(self, 'ambient_sound_index', 0),
+            'current_sound': self.current_ambient,
+            'next_sound': sound_names[(getattr(self, 'ambient_sound_index', 0) + 1) % len(sound_names)] if len(sound_names) > 1 else None,
+            'all_sounds': sound_names
+        }
+    
+    def ensure_ambient_playing(self) -> None:
+        """Ensure ambient sound is playing, restart if it stopped"""
+        if not self.audio_available or not self.ambient_sounds:
+            return
+            
+        if not self.is_ambient_playing() and self.current_ambient:
+            # Restart the current ambient sound
+            print(f"Ambient sound stopped, restarting: {self.current_ambient}")
+            self.start_ambient_sound(self.current_ambient)
     
     def draw_detection_overlays(self, frame: np.ndarray, detections: List[Detection]) -> None:
         """Draw detection overlays on the frame"""
@@ -221,6 +470,8 @@ class DetectionVisualizer:
                 self.display_config.color_state = 'red'
             self.display_config.show_enemy = not self.display_config.show_enemy
             self.display_config.solid_border = not self.display_config.solid_border
+            if self.audio_available and self.vocal_sound:
+                self.vocal_sound.play()
         elif key == ord('g') and ENABLE_GRAD_CAM_VIEW:  # 'g' key to toggle Grad-CAM
             if app_instance:
                 app_instance.display_config.gradcam_enabled = not app_instance.display_config.gradcam_enabled
@@ -242,3 +493,13 @@ class DetectionVisualizer:
         self.frame_count = 0
         self.last_fps_time = time.time()
         self.current_fps = 0 
+    
+    def cleanup_audio(self) -> None:
+        """Clean up audio resources"""
+        if hasattr(self, 'audio_available') and self.audio_available:
+            try:
+                # Stop ambient sounds first
+                self.stop_ambient_sound()
+                pygame.mixer.quit()
+            except Exception as e:
+                print(f"Warning: Error cleaning up audio: {e}") 
