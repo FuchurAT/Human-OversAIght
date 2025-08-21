@@ -18,7 +18,8 @@ from config.config import (
     LEGEND_WINDOW_HEIGHT, LEGEND_FONT_SCALE, LEGEND_LINE_HEIGHT, LEGEND_BOX_PADDING,
     DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, MIN_WINDOW_SIZE, DEFAULT_FPS,
     DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_SCALE_MODE,
-    DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO, DEFAULT_VIDEO_CENTER_ON_SCREEN, DEFAULT_VIDEO_SCALE_MULTIPLIER
+    DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO, DEFAULT_VIDEO_CENTER_ON_SCREEN, DEFAULT_VIDEO_SCALE_MULTIPLIER,
+    SCREEN_CONFIG
 )
 
 from application.models import Detection, DisplayConfig
@@ -40,12 +41,15 @@ from config.classes import CLASSES
 class VideoInferenceApp:
     """Main application class for video inference with YOLO"""
     
-    def __init__(self, video_path: str, model_path: str, box_threshold: float = DEFAULT_BOX_THRESHOLD):
+    def __init__(self, video_path: str, model_path: str, box_threshold: float = DEFAULT_BOX_THRESHOLD, 
+                 app_id: str = None, screen_id: int = None):
         self.video_path = video_path
         self.model_path = model_path
         self.output_path = ""
         self.box_threshold = box_threshold
         self.max_frames = 0
+        self.app_id = app_id or 'default'
+        self.screen_id = screen_id or 0
         
         # Initialize components
         self.display_config = DisplayConfig()
@@ -67,21 +71,51 @@ class VideoInferenceApp:
         # Initialize visualizer
         self.visualizer = DetectionVisualizer(self.display_config, list(CLASSES.keys()))
         
-        # Initialize button handler
-        self.button_handler = ButtonHandler(self)
-        self.button_handler.start_serial_monitoring()
+        # Initialize button handler (will be set up by multi-app manager)
+        self.button_handler = None
+        
+        # Screen configuration
+        self.screen_config = self._get_screen_config()
         
         # Log initialization status
         logging.info(f"VideoInferenceApp initialized successfully")
+        logging.info(f"  App ID: {self.app_id}")
+        logging.info(f"  Screen ID: {self.screen_id}")
         logging.info(f"  Model: {self.model_path}")
         logging.info(f"  Video path: {self.video_path}")
         logging.info(f"  Box threshold: {self.box_threshold}")
         logging.info(f"  GradCAM enabled: {self.gradcam_processor.is_model_loaded() if self.gradcam_processor is not None else False}")
-        logging.info(f"  Button handler enabled: {self.button_handler.is_running}")
-        logging.info(f"  Window size config: {DEFAULT_WINDOW_WIDTH}x{DEFAULT_WINDOW_HEIGHT}")
-        logging.info(f"  Video size config: {DEFAULT_VIDEO_WIDTH}x{DEFAULT_VIDEO_HEIGHT}")
-        logging.info(f"  Video scale mode: {DEFAULT_VIDEO_SCALE_MODE}")
-        logging.info(f"  Video scale multiplier: {DEFAULT_VIDEO_SCALE_MULTIPLIER}")
+        logging.info(f"  Screen config: {self.screen_config}")
+    
+    def _get_screen_config(self) -> dict:
+        """Get screen configuration for this application"""
+        if self.screen_id in SCREEN_CONFIG:
+            return SCREEN_CONFIG[self.screen_id].copy()
+        else:
+            # Fallback to default screen config
+            return {
+                'width': DEFAULT_WINDOW_WIDTH,
+                'height': DEFAULT_WINDOW_HEIGHT,
+                'x_offset': 0,
+                'y_offset': 0,
+                'scale_mode': DEFAULT_VIDEO_SCALE_MODE,
+                'scale_multiplier': DEFAULT_VIDEO_SCALE_MULTIPLIER,
+                'maintain_aspect_ratio': DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO,
+                'center_video': DEFAULT_VIDEO_CENTER_ON_SCREEN
+            }
+    
+    def set_button_handler(self, button_handler: ButtonHandler) -> None:
+        """Set the button handler for this application instance"""
+        self.button_handler = button_handler
+        logging.info(f"Button handler set for app {self.app_id}")
+    
+    def _initialize_button_handler(self) -> None:
+        """Initialize button handler for backward compatibility (single app mode)"""
+        if self.button_handler is None:
+            from application.button_handler import ButtonHandler
+            self.button_handler = ButtonHandler(self)
+            self.button_handler.start_serial_monitoring()
+            logging.info(f"Button handler initialized for app {self.app_id} (backward compatibility mode)")
     
     def _initialize_model(self) -> None:
         """Initialize the YOLO model with proper error handling"""
@@ -266,7 +300,7 @@ class VideoInferenceApp:
             cv2.imshow("Legend Display", text_frame)
     
     def _setup_fullscreen_window(self, window_name: str) -> None:
-        """Setup fullscreen window with proper properties"""
+        """Setup fullscreen window with proper properties and screen positioning"""
         cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
         
         try:
@@ -275,6 +309,14 @@ class VideoInferenceApp:
             pass
         
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        
+        # Position window based on screen configuration
+        if self.screen_config and 'x_offset' in self.screen_config and 'y_offset' in self.screen_config:
+            try:
+                cv2.moveWindow(window_name, self.screen_config['x_offset'], self.screen_config['y_offset'])
+                logging.info(f"Positioned window '{window_name}' at ({self.screen_config['x_offset']}, {self.screen_config['y_offset']})")
+            except Exception as e:
+                logging.warning(f"Failed to position window: {e}")
         
         # Force window to appear and go fullscreen
         dummy = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -366,6 +408,9 @@ class VideoInferenceApp:
     
     def run(self) -> None:
         """Main application loop"""
+        # Initialize button handler for backward compatibility (single app mode)
+        self._initialize_button_handler()
+        
         # Get all .mp4 files in the folder
         mp4_files = [file for file in os.listdir(self.video_path) if file.endswith('.mp4')]
 
@@ -606,23 +651,12 @@ class VideoInferenceApp:
     
     def _display_frame_fullscreen(self, window_name: str, display_img: np.ndarray, 
                                  first_frame: bool, fullscreen_size: Optional[Tuple[int, int]]) -> Tuple[bool, Optional[Tuple[int, int]]]:
-        """Display frame in fullscreen with configurable sizing"""
+        """Display frame in fullscreen with configurable sizing using screen configuration"""
         if first_frame:
-            # Use configured video size or fall back to configured window size
-            if DEFAULT_VIDEO_WIDTH is not None and DEFAULT_VIDEO_HEIGHT is not None:
-                # Use configured video dimensions
-                ww, wh = DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT
-                logging.info(f"Using configured video size: {ww}x{wh}")
-            else:
-                # Use configured window dimensions from config.py
-                ww, wh = DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
-                logging.info(f"Using configured window size: {ww}x{wh}")
-            
-            # Log the source of the dimensions for debugging
-            if DEFAULT_VIDEO_WIDTH is not None and DEFAULT_VIDEO_HEIGHT is not None:
-                logging.info(f"Source: DEFAULT_VIDEO_WIDTH={DEFAULT_VIDEO_WIDTH}, DEFAULT_VIDEO_HEIGHT={DEFAULT_VIDEO_HEIGHT}")
-            else:
-                logging.info(f"Source: DEFAULT_WINDOW_WIDTH={DEFAULT_WINDOW_WIDTH}, DEFAULT_WINDOW_HEIGHT={DEFAULT_WINDOW_HEIGHT}")
+            # Use screen configuration for dimensions
+            ww = self.screen_config.get('width', DEFAULT_WINDOW_WIDTH)
+            wh = self.screen_config.get('height', DEFAULT_WINDOW_HEIGHT)
+            logging.info(f"Using screen config size: {ww}x{wh}")
             
             fullscreen_size = (ww, wh)
             first_frame = False
@@ -633,23 +667,31 @@ class VideoInferenceApp:
             ww, wh = fullscreen_size
             ih, iw = display_img.shape[:2]
             
+            # Get scaling configuration from screen config
+            scale_mode = self.screen_config.get('scale_mode', DEFAULT_VIDEO_SCALE_MODE)
+            scale_multiplier = self.screen_config.get('scale_multiplier', DEFAULT_VIDEO_SCALE_MULTIPLIER)
+            maintain_aspect_ratio = self.screen_config.get('maintain_aspect_ratio', DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO)
+            center_video = self.screen_config.get('center_video', DEFAULT_VIDEO_CENTER_ON_SCREEN)
+            
             # Debug logging for scaling
-            logging.info(f"Scaling: video={iw}x{ih}, screen={ww}x{wh}, mode={DEFAULT_VIDEO_SCALE_MODE}")
+            logging.info(f"Scaling: video={iw}x{ih}, screen={ww}x{wh}, mode={scale_mode}")
             
             # Apply scaling based on configuration
-            if DEFAULT_VIDEO_SCALE_MODE == 'original':
+            if scale_mode == 'original':
                 # Display original size
                 new_w, new_h = iw, ih
                 logging.info(f"Original mode: keeping video size {iw}x{ih}")
-            elif DEFAULT_VIDEO_SCALE_MODE == 'stretch':
+            elif scale_mode == 'stretch':
                 # Stretch to fill entire window (may distort video)
                 new_w, new_h = ww, wh
                 logging.info(f"Stretch mode: stretching to screen size {ww}x{wh}")
             else:  # 'fit' mode (default)
                 # Fit to fill screen while maintaining aspect ratio
-                scale = min(ww / iw, wh / ih)
+                if maintain_aspect_ratio:
+                    scale = min(ww / iw, wh / ih)
+                else:
+                    scale = max(ww / iw, wh / ih)
                 # Apply multiplier to use more screen space
-                scale_multiplier = DEFAULT_VIDEO_SCALE_MULTIPLIER
                 scale = scale * scale_multiplier
                 new_w, new_h = int(iw * scale), int(ih * scale)
                 logging.info(f"Fit mode: scale={scale:.3f}, multiplier={scale_multiplier}, final={new_w}x{new_h}")
@@ -660,7 +702,7 @@ class VideoInferenceApp:
             # Debug logging for final dimensions
             logging.info(f"Final dimensions: original={iw}x{ih}, scaled={new_w}x{new_h}, screen={ww}x{wh}")
             
-            if DEFAULT_VIDEO_CENTER_ON_SCREEN:
+            if center_video:
                 # Center on black background
                 fullscreen_img = np.zeros((wh, ww, 3), dtype=np.uint8)
                 y_offset = (wh - new_h) // 2

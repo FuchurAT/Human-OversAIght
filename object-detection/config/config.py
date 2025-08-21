@@ -7,6 +7,60 @@ Contains all constants, default values, and configuration settings.
 ENABLE_UNMASK = True
 ENABLE_GRAD_CAM_VIEW = True
 
+# Multi-Application Configuration
+# Each application can have its own configuration including screen, video folder, and model
+APPLICATIONS = {
+    'app_01': {
+        'name': 'Application 01',
+        'screen_id': 0,  # Primary monitor (0), secondary (1), etc.
+        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS',
+        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'window_title': 'Object Detection - App 01',
+        'enabled': True
+    },
+    'app_02': {
+        'name': 'Application 02', 
+        'screen_id': 1,  # Secondary monitor
+        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS 2',
+        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'window_title': 'Object Detection - App 02',
+        'enabled': True
+    },
+    'app_03': {
+        'name': 'Application 03',
+        'screen_id': 0,  # Same screen as app_01 but different position
+        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS 3',
+        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'window_title': 'Object Detection - App 03',
+        'enabled': False  # Disabled by default
+    }
+}
+
+# Screen Configuration
+# Maps screen IDs to display settings
+SCREEN_CONFIG = {
+    0: {  # Primary monitor
+        'width': 1920,
+        'height': 1080,
+        'x_offset': 0,
+        'y_offset': 0,
+        'scale_mode': 'fit',
+        'scale_multiplier': 0.95,
+        'maintain_aspect_ratio': True,
+        'center_video': True
+    },
+    1: {  # Secondary monitor
+        'width': 1920,
+        'height': 1080,
+        'x_offset': 1920,  # Position to the right of primary
+        'y_offset': 0,
+        'scale_mode': 'fit',
+        'scale_multiplier': 0.9,
+        'maintain_aspect_ratio': True,
+        'center_video': True
+    }
+}
+
 # Default Thresholds
 DEFAULT_BOX_THRESHOLD = 0.25
 DEFAULT_IOU_THRESHOLD = 0.2
@@ -73,56 +127,57 @@ DEFAULT_VIDEO_PATH = "/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS"
 
 # Button-to-Keyboard Mapping Configuration
 # Maps the 48 buttons from Arduino Mega to keyboard actions in the detection application
+# Extended to support multiple applications with app_id parameter
 BUTTON_MAPPING = {
-    # All 48 buttons now act as space (toggle unmask/blur mode)
-    0: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    1: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    2: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    3: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    4: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    5: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    6: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    7: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    8: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    9: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    10: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    11: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    12: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    13: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    14: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    15: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    16: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    17: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    18: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    19: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    20: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    21: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    22: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    23: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    24: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    25: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    26: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    27: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    28: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    29: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    30: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    31: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    32: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    33: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    34: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    35: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    36: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    37: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    38: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    39: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    40: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    41: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    42: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    43: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    44: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    45: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    46: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
-    47: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode'},
+    # All 48 buttons now act as space (toggle unmask/blur mode) for all applications
+    0: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    1: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    2: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    3: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    4: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    5: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    6: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    7: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    8: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    9: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    10: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    11: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    12: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    13: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    14: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    15: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    16: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    17: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    18: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    19: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    20: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    21: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    22: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    23: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    24: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    25: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    26: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    27: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    28: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    29: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    30: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    31: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    32: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    33: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    34: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    35: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    36: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    37: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    38: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    39: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    40: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    41: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    42: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    43: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    44: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    45: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    46: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    47: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
 }
 
 # Original button mappings (commented out for reference)

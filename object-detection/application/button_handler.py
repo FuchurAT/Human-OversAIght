@@ -1,24 +1,32 @@
 """
 Button Handler Module for Arduino Mega Integration
 Handles button inputs from the 48-button Arduino Mega and maps them to keyboard actions
-in the detection application.
+in the detection application. Now supports multiple applications.
 """
 
 import threading
 import time
 import logging
 import serial
-from config.config import BUTTON_MAPPING, BUTTON_CONFIG, BUTTON_ACTIONS
+from config.config import BUTTON_MAPPING, BUTTON_CONFIG, BUTTON_ACTIONS, APPLICATIONS
 
 
 class ButtonHandler:
     """
     Handles button inputs from Arduino Mega and maps them to application actions.
-    Integrates with the existing keyboard handling system.
+    Integrates with the existing keyboard handling system and supports multiple applications.
     """
     
-    def __init__(self, app_instance=None):
-        self.app_instance = app_instance
+    def __init__(self, app_instances=None):
+        # Support both single app instance (backward compatibility) and multiple instances
+        if app_instances is None:
+            self.app_instances = {}
+        elif isinstance(app_instances, dict):
+            self.app_instances = app_instances
+        else:
+            # Single app instance for backward compatibility
+            self.app_instances = {'default': app_instances}
+        
         self.button_states = [False] * 48
         
         # Serial connection
@@ -43,7 +51,7 @@ class ButtonHandler:
         self.connection_errors = 0
         self.max_connection_errors = 3
         
-        logging.info("ButtonHandler initialized")
+        logging.info("ButtonHandler initialized with multi-application support")
     
     def _setup_action_callbacks(self):
         """Setup action callback functions for each button action"""
@@ -97,6 +105,47 @@ class ButtonHandler:
             'go_to_end': self._action_go_to_end,
             'emergency_stop': self._action_emergency_stop,
         }
+    
+    def add_app_instance(self, app_id: str, app_instance) -> None:
+        """Add an application instance to the button handler"""
+        self.app_instances[app_id] = app_instance
+        logging.info(f"Added app instance '{app_id}' to ButtonHandler")
+    
+    def remove_app_instance(self, app_id: str) -> None:
+        """Remove an application instance from the button handler"""
+        if app_id in self.app_instances:
+            del self.app_instances[app_id]
+            logging.info(f"Removed app instance '{app_id}' from ButtonHandler")
+    
+    def get_app_instance(self, app_id: str = None):
+        """Get an application instance. If app_id is None, return the first available instance for backward compatibility"""
+        if app_id is None:
+            # Backward compatibility: return first available instance
+            return next(iter(self.app_instances.values())) if self.app_instances else None
+        return self.app_instances.get(app_id)
+    
+    def get_all_app_instances(self) -> dict:
+        """Get all application instances"""
+        return self.app_instances.copy()
+    
+    def _get_target_apps(self, button_id: int) -> list:
+        """Get target applications for a button press based on app_id in button mapping"""
+        if button_id not in BUTTON_MAPPING:
+            return []
+        
+        action_info = BUTTON_MAPPING[button_id]
+        app_id = action_info.get('app_id', 'all')
+        
+        if app_id == 'all':
+            # Return all enabled applications
+            return list(self.app_instances.values())
+        elif app_id in self.app_instances:
+            # Return specific application
+            return [self.app_instances[app_id]]
+        else:
+            # App not found, return empty list
+            logging.warning(f"Application '{app_id}' not found for button {button_id}")
+            return []
     
     def check_serial_port_availability(self) -> bool:
         """Check if the configured serial port is available"""
@@ -224,29 +273,46 @@ class ButtonHandler:
                 self.button_states[i] = button_pressed
     
     def _handle_button_press(self, button_id: int):
-        """Handle button press event with debouncing"""
+        """Handle button press event with debouncing and multi-application support"""
         if button_id in BUTTON_MAPPING:
             action_info = BUTTON_MAPPING[button_id]
             action_name = action_info['action']
             key = action_info['key']
+            app_id = action_info.get('app_id', 'all')
             
-            logging.info(f"Button {button_id} pressed: {action_name} (key: {key})")
+            logging.info(f"Button {button_id} pressed: {action_name} (key: {key}, app_id: {app_id})")
             
-            # Execute action if callback exists
-            if action_name in self.action_callbacks:
+            # Get target applications for this button
+            target_apps = self._get_target_apps(button_id)
+            
+            if not target_apps:
+                logging.warning(f"No target applications found for button {button_id}")
+                return
+            
+            # Execute action for all target applications
+            for app_instance in target_apps:
                 try:
-                    self.action_callbacks[action_name]()
-                    if self.config['enable_sound_feedback']:
-                        self._play_button_sound(button_id)
-                    if self.config['enable_visual_feedback']:
-                        self._show_button_feedback(button_id)
+                    if action_name in self.action_callbacks:
+                        # Temporarily set the app instance for the callback
+                        old_app_instance = getattr(self, '_current_app_instance', None)
+                        self._current_app_instance = app_instance
+                        
+                        self.action_callbacks[action_name]()
+                        
+                        # Restore previous app instance
+                        self._current_app_instance = old_app_instance
+                        
+                        if self.config['enable_sound_feedback']:
+                            self._play_button_sound(button_id)
+                        if self.config['enable_visual_feedback']:
+                            self._show_button_feedback(button_id)
+                    else:
+                        logging.warning(f"Button action '{action_name}' has no callback implementation")
                 except Exception as e:
-                    logging.error(f"Error executing button action {action_name}: {e}")
+                    logging.error(f"Error executing button action {action_name} for app instance: {e}")
                     # Don't let button action errors stop the serial monitoring
                     import traceback
                     logging.debug(f"Button action traceback: {traceback.format_exc()}")
-            else:
-                logging.warning(f"Button action '{action_name}' has no callback implementation")
         else:
             logging.debug(f"Button {button_id} pressed but not mapped to any action")
     
@@ -260,240 +326,279 @@ class ButtonHandler:
         # TODO: Implement visual feedback
         pass
     
-    # Action callback implementations
+    # Action callback implementations - now support multiple applications
     def _action_exit(self):
         """Exit the application"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.info("Exit requested via button")
             # Signal exit through app instance
     
     def _action_next_video(self):
         """Move to next video"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.info("Next video requested via button")
             # Signal next video through app instance
     
     def _action_previous_video(self):
         """Move to previous video"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.info("Previous video requested via button")
             # Signal previous video through app instance
     
     def _action_restart_video(self):
         """Restart current video"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.info("Restart video requested via button")
             # Signal restart through app instance
     
     def _action_pause_resume(self):
         """Toggle pause/resume"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.info("Pause/Resume toggled via button")
             # Signal pause/resume through app instance
     
     def _action_fast_forward(self):
         """Fast forward video"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.info("Fast forward requested via button")
             # Signal fast forward through app instance
     
     def _action_rewind(self):
         """Rewind video"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.info("Rewind requested via button")
             # Signal rewind through app instance
     
     def _action_home(self):
         """Go to first video"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.info("Home requested via button")
             # Signal home through app instance
     
     def _action_toggle_legend(self):
         """Toggle legend display"""
-        if self.app_instance:
-            self.app_instance.display_config.show_legend = not self.app_instance.display_config.show_legend
-            logging.info(f"Legend display toggled via button: {self.app_instance.display_config.show_legend}")
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            app_instance.display_config.show_legend = not app_instance.display_config.show_legend
+            logging.info(f"Legend display toggled via button: {app_instance.display_config.show_legend}")
     
     def _action_toggle_fps(self):
         """Toggle FPS display"""
-        if self.app_instance:
-            self.app_instance.display_config.show_fps_info = not self.app_instance.display_config.show_fps_info
-            logging.info(f"FPS display toggled via button: {self.app_instance.display_config.show_fps_info}")
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            app_instance.display_config.show_fps_info = not app_instance.display_config.show_fps_info
+            logging.info(f"FPS display toggled via button: {app_instance.display_config.show_fps_info}")
     
     def _action_toggle_gradcam(self):
         """Toggle Grad-CAM view"""
-        if self.app_instance:
-            self.app_instance.display_config.gradcam_enabled = not self.app_instance.display_config.gradcam_enabled
-            logging.info(f"Grad-CAM toggled via button: {self.app_instance.display_config.gradcam_enabled}")
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            app_instance.display_config.gradcam_enabled = not app_instance.display_config.gradcam_enabled
+            logging.info(f"Grad-CAM toggled via button: {app_instance.display_config.gradcam_enabled}")
     
     def _action_toggle_gradcam_box(self):
         """Toggle Grad-CAM box mode"""
-        if self.app_instance:
-            self.app_instance.display_config.gradcam_in_box_only = not self.app_instance.display_config.gradcam_in_box_only
-            logging.info(f"Grad-CAM box mode toggled via button: {self.app_instance.display_config.gradcam_in_box_only}")
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            app_instance.display_config.gradcam_in_box_only = not app_instance.display_config.gradcam_in_box_only
+            logging.info(f"Grad-CAM box mode toggled via button: {app_instance.display_config.gradcam_in_box_only}")
     
     def _action_toggle_glitches(self):
         """Toggle glitch effects"""
-        if self.app_instance:
-            self.app_instance.display_config.enable_glitches = not self.app_instance.display_config.enable_glitches
-            logging.info(f"Glitches toggled via button: {self.app_instance.display_config.enable_glitches}")
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            app_instance.display_config.enable_glitches = not app_instance.display_config.enable_glitches
+            logging.info(f"Glitches toggled via button: {app_instance.display_config.enable_glitches}")
     
     def _action_toggle_center_display(self):
         """Toggle center display mode"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement center display toggle
             logging.info("Center display toggle requested via button")
     
     def _action_toggle_visualization(self):
         """Toggle visualization mode"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement visualization toggle
             logging.info("Visualization toggle requested via button")
     
     def _action_toggle_debug(self):
         """Toggle debug information"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement debug toggle
             logging.info("Debug toggle requested via button")
     
     def _action_toggle_unmask(self):
         """Toggle unmask/blur mode"""
-        if self.app_instance and hasattr(self.app_instance, 'visualizer'):
-            self.app_instance.visualizer.handle_key_press(32, self.app_instance)  # Space key
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance and hasattr(app_instance, 'visualizer'):
+            app_instance.visualizer.handle_key_press(32, app_instance)  # Space key
             logging.info("Unmask/blur toggled via button")
     
     def _action_set_threshold(self, threshold: float):
         """Set confidence threshold"""
-        if self.app_instance:
-            self.app_instance.box_threshold = threshold
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            app_instance.box_threshold = threshold
             logging.info(f"Confidence threshold set to {threshold} via button")
     
     def _action_increase_threshold(self):
         """Increase confidence threshold"""
-        if self.app_instance:
-            new_threshold = min(1.0, self.app_instance.box_threshold + 0.1)
-            self.app_instance.box_threshold = new_threshold
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            new_threshold = min(1.0, app_instance.box_threshold + 0.1)
+            app_instance.box_threshold = new_threshold
             logging.info(f"Confidence threshold increased to {new_threshold} via button")
     
     def _action_decrease_threshold(self):
         """Decrease confidence threshold"""
-        if self.app_instance:
-            new_threshold = max(0.1, self.app_instance.box_threshold - 0.1)
-            self.app_instance.box_threshold = new_threshold
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            new_threshold = max(0.1, app_instance.box_threshold - 0.1)
+            app_instance.box_threshold = new_threshold
             logging.info(f"Confidence threshold decreased to {new_threshold} via button")
     
     def _action_toggle_memory_cleanup(self):
         """Toggle memory cleanup"""
-        if self.app_instance and hasattr(self.app_instance, 'memory_manager'):
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance and hasattr(app_instance, 'memory_manager'):
             # TODO: Implement memory cleanup toggle
             logging.info("Memory cleanup toggle requested via button")
     
     def _action_toggle_audio(self):
         """Toggle audio effects"""
-        if self.app_instance and hasattr(self.app_instance, 'visualizer'):
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance and hasattr(app_instance, 'visualizer'):
             # TODO: Implement audio toggle
             logging.info("Audio toggle requested via button")
     
     def _action_toggle_training_mode(self):
         """Toggle training mode"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement training mode toggle
             logging.info("Training mode toggle requested via button")
     
     def _action_toggle_output(self):
         """Toggle output recording"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement output toggle
             logging.info("Output toggle requested via button")
     
     def _action_reset_display(self):
         """Reset display settings"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement display reset
             logging.info("Display reset requested via button")
     
     def _action_export_results(self):
         """Export detection results"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement results export
             logging.info("Results export requested via button")
     
     def _action_save_screenshot(self):
         """Save current frame"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement screenshot save
             logging.info("Screenshot save requested via button")
     
     def _action_toggle_ui(self):
         """Toggle UI elements"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement UI toggle
             logging.info("UI toggle requested via button")
     
     def _action_jump_frame_forward(self):
         """Jump 10 frames forward"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement frame jump forward
             logging.info("Frame jump forward requested via button")
     
     def _action_jump_frame_backward(self):
         """Jump 10 frames backward"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement frame jump backward
             logging.info("Frame jump backward requested via button")
     
     def _action_toggle_edge_detection(self):
         """Toggle edge detection"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement edge detection toggle
             logging.info("Edge detection toggle requested via button")
     
     def _action_cycle_view_mode(self):
         """Cycle through view modes"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement view mode cycling
             logging.info("View mode cycle requested via button")
     
     def _action_confirm_action(self):
         """Confirm current action"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement action confirmation
             logging.info("Action confirmation requested via button")
     
     def _action_undo_action(self):
         """Undo last action"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement action undo
             logging.info("Action undo requested via button")
     
     def _action_clear_detections(self):
         """Clear all detections"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement detections clear
             logging.info("Detections clear requested via button")
     
     def _action_insert_marker(self):
         """Insert frame marker"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement frame marker insertion
             logging.info("Frame marker insertion requested via button")
     
     def _action_go_to_start(self):
         """Go to video start"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement go to start
             logging.info("Go to start requested via button")
     
     def _action_go_to_end(self):
         """Go to video end"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             # TODO: Implement go to end
             logging.info("Go to end requested via button")
     
     def _action_emergency_stop(self):
         """Emergency stop"""
-        if self.app_instance:
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
             logging.warning("Emergency stop requested via button")
             # Signal emergency stop through app instance
     
@@ -521,7 +626,8 @@ class ButtonHandler:
             'is_running': self.is_running,
             'thread_alive': self.serial_thread.is_alive() if self.serial_thread else False,
             'serial_port': self.config.get('serial_port', 'Unknown'),
-            'baud_rate': self.config.get('baud_rate', 'Unknown')
+            'baud_rate': self.config.get('baud_rate', 'Unknown'),
+            'app_instances': list(self.app_instances.keys())
         }
     
     def get_button_state(self, button_id: int) -> bool:
@@ -552,9 +658,10 @@ class ButtonHandler:
         logging.info("Button states and press times reset")
     
     def set_app_instance(self, app_instance):
-        """Set the application instance for action callbacks"""
-        self.app_instance = app_instance
-        logging.info("App instance set for ButtonHandler")
+        """Set the application instance for action callbacks (backward compatibility)"""
+        # For backward compatibility, add as 'default' instance
+        self.app_instances['default'] = app_instance
+        logging.info("App instance set for ButtonHandler (backward compatibility mode)")
     
     def set_debounce_delay(self, delay: float):
         """Set the debounce delay for button presses (in seconds)"""
@@ -616,7 +723,8 @@ class ButtonHandler:
             'last_heartbeat': self.last_heartbeat,
             'heartbeat_interval': self.heartbeat_interval,
             'serial_port': self.config.get('serial_port', 'Unknown'),
-            'baud_rate': self.config.get('baud_rate', 'Unknown')
+            'baud_rate': self.config.get('baud_rate', 'Unknown'),
+            'app_instances': list(self.app_instances.keys())
         }
 
     def test_button_functionality(self, button_id: int = 0):
@@ -636,6 +744,7 @@ class ButtonHandler:
         logging.info(f"Thread alive: {self.serial_thread.is_alive() if self.serial_thread else False}")
         logging.info(f"Connection errors: {self.connection_errors}")
         logging.info(f"Last heartbeat: {time.time() - self.last_heartbeat:.1f}s ago")
+        logging.info(f"App instances: {list(self.app_instances.keys())}")
         
         # Show first few button states
         active_buttons = [i for i, state in enumerate(self.button_states) if state]
