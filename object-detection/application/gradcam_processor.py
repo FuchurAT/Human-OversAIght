@@ -23,8 +23,7 @@ class GradCAMProcessor:
         self.gradcam_buffer = None
         self.last_gradcam_img = None
         self.last_frame_shape = None
-        self.frame_skip_counter = 0
-        self.frame_skip_threshold = DEFAULT_FRAME_SKIP_THRESHOLD
+        # Frame skip counter and threshold removed to fix synchronization issues
         
         # Initialize buffers with default values
         self._initialize_buffers()
@@ -202,71 +201,67 @@ class GradCAMProcessor:
             logging.warning("Received None frame in process_gradcam")
             return np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # Convert to grayscale and back to BGR (this was in the working code)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        frame = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        # Keep original frame for Grad-CAM processing (don't convert to grayscale)
+        # The grayscale conversion was breaking Grad-CAM functionality
         
-        # Use gradcam buffer to avoid repeated allocations
-        if self.gradcam_buffer is None or self.gradcam_buffer.shape != frame.shape:
-            self.gradcam_buffer = np.zeros_like(frame)
+        # Ensure buffer compatibility
+        self._ensure_buffer_compatibility(frame)
         
-        gradcam_img = self.gradcam_buffer.copy()
-        
-        # Skip Grad-CAM processing for performance (every N frames)
-        self.frame_skip_counter += 1
-        if self.frame_skip_counter % self.frame_skip_threshold == 0:
-            try:
-                # Sort detections by confidence, descending
-                sorted_detections = sorted(detections, key=lambda x: x.confidence, reverse=True)
-                selected_boxes = []
-                selected_confs = []
-                selected_classes = []
-                
-                for detection in detections:
-                    if detection.box is not None and len(detection.box) == 4:
-                        box = detection.box
-                        conf = detection.confidence
-                        class_id = detection.class_id
-                        
-                        # Check overlap with already selected boxes
-                        overlap = False
-                        for sel_box in selected_boxes:
-                            # Simple IoU check (you may need to implement this)
-                            if self._iou(box, sel_box) > 0.5:  # Default IoU threshold
-                                overlap = True
-                                break
-                        if not overlap:
-                            selected_boxes.append(box)
-                            selected_confs.append(conf)
-                            selected_classes.append(class_id)
-                
-                # Overlay Grad-CAM for each selected box
-                if in_box_only:
-                    gradcam_img = frame.copy()
-                    for box, conf, class_id in zip(selected_boxes, selected_confs, selected_classes):
-                        single_gradcam = self.get_gradcam_image(frame)
-                        x1, y1, x2, y2 = box
-                        gradcam_img[y1:y2, x1:x2] = single_gradcam[y1:y2, x1:x2]
-                else:
-                    gradcam_img = np.zeros_like(frame)
-                    for box, conf, class_id in zip(selected_boxes, selected_confs, selected_classes):
-                        single_gradcam = self.get_gradcam_image(frame)
-                        gradcam_img = np.maximum(gradcam_img, single_gradcam)
-                
-                self.last_gradcam_img = gradcam_img
-                
-            except Exception as e:
-                logging.warning(f"Grad-CAM failed: {e}")
-                gradcam_img = self.last_gradcam_img if self.last_gradcam_img is not None else self.gradcam_buffer.copy()
-        else:
-            gradcam_img = self.last_gradcam_img if self.last_gradcam_img is not None else self.gradcam_buffer.copy()
+        # Process GradCAM for every frame to maintain synchronization
+        # Frame skipping was causing out-of-sync issues between detection and GradCAM
+        try:
+            # Sort detections by confidence, descending
+            sorted_detections = sorted(detections, key=lambda x: x.confidence, reverse=True)
+            selected_boxes = []
+            selected_confs = []
+            selected_classes = []
+            
+            for detection in detections:
+                if detection.box is not None and len(detection.box) == 4:
+                    box = detection.box
+                    conf = detection.confidence
+                    class_id = detection.class_id
+                    
+                    # Check overlap with already selected boxes
+                    overlap = False
+                    for sel_box in selected_boxes:
+                        # Simple IoU check (you may need to implement this)
+                        if self._iou(box, sel_box) > 0.5:  # Default IoU threshold
+                            overlap = True
+                            break
+                    if not overlap:
+                        selected_boxes.append(box)
+                        selected_confs.append(conf)
+                        selected_classes.append(class_id)
+            
+            # Overlay Grad-CAM for each selected box
+            if in_box_only:
+                gradcam_img = frame.copy()
+                for box, conf, class_id in zip(selected_boxes, selected_confs, selected_classes):
+                    single_gradcam = self.get_gradcam_image(frame)
+                    x1, y1, x2, y2 = box
+                    gradcam_img[y1:y2, x1:x2] = single_gradcam[y1:y2, x1:x2]
+            else:
+                gradcam_img = np.zeros_like(frame)
+                for box, conf, class_id in zip(selected_boxes, selected_confs, selected_classes):
+                    single_gradcam = self.get_gradcam_image(frame)
+                    gradcam_img = np.maximum(gradcam_img, single_gradcam)
+            
+            # Store the processed image for potential future use
+            self.last_gradcam_img = gradcam_img.copy()
+            
+        except Exception as e:
+            logging.warning(f"Grad-CAM failed: {e}")
+            # Return original frame instead of stale last_gradcam_img to prevent sync issues
+            gradcam_img = frame.copy()
         
         return gradcam_img
     
     def set_frame_skip_threshold(self, threshold: int) -> None:
-        """Set the frame skip threshold for performance tuning"""
-        self.frame_skip_threshold = max(1, threshold)  # Ensure minimum of 1
-        #logging.info(f"Grad-CAM frame skip threshold set to {self.frame_skip_threshold}")
+        """Set the frame skip threshold for performance tuning (deprecated - no longer used)"""
+        # Frame skipping was removed to fix synchronization issues
+        # This method is kept for backward compatibility but does nothing
+        pass
     
     def is_model_loaded(self) -> bool:
         """Check if the Grad-CAM model is successfully loaded"""

@@ -226,9 +226,15 @@ class ButtonHandler:
                             self._check_connection_health(ser)
                             self.last_heartbeat = current_time
                         
-                        line = ser.readline().decode('ascii', errors='replace').strip()
-                        if line:
-                            self._process_serial_line(line)
+                        # Use non-blocking read with timeout
+                        if ser.in_waiting > 0:
+                            line = ser.readline().decode('ascii', errors='replace').strip()
+                            if line:
+                                self._process_serial_line(line)
+                        else:
+                            # Small sleep to prevent busy waiting
+                            time.sleep(0.01)
+                            
                     except (serial.SerialException, OSError) as e:
                         logging.error(f"Serial read error: {e}")
                         self.connection_errors += 1
@@ -603,11 +609,25 @@ class ButtonHandler:
             # Signal emergency stop through app instance
     
     def stop(self):
-        """Stop button monitoring"""
+        """Stop the button handler and clean up resources"""
+        logging.info("Stopping button handler...")
         self.is_running = False
+        
+        # Wait for serial thread to finish
         if self.serial_thread and self.serial_thread.is_alive():
-            self.serial_thread.join(timeout=1.0)
-        logging.info("ButtonHandler stopped")
+            self.serial_thread.join(timeout=2.0)
+            if self.serial_thread.is_alive():
+                logging.warning("Serial thread did not stop gracefully")
+        
+        # Close serial connection if open
+        if hasattr(self, 'serial_connection') and self.serial_connection:
+            try:
+                if self.serial_connection.is_open:
+                    self.serial_connection.close()
+            except Exception as e:
+                logging.warning(f"Error closing serial connection: {e}")
+        
+        logging.info("Button handler stopped")
     
     def restart(self):
         """Restart button monitoring"""
@@ -713,18 +733,22 @@ class ButtonHandler:
             logging.error(f"Connection health check failed: {e}")
             return False
     
+    def get_running_status(self) -> bool:
+        """Check if the button handler is running"""
+        return self.is_running
+    
     def get_connection_health(self) -> dict:
-        """Get detailed connection health information"""
+        """Get connection health status"""
+        current_time = time.time()
+        time_since_heartbeat = current_time - self.last_heartbeat
+        
         return {
             'is_running': self.is_running,
-            'thread_alive': self.serial_thread.is_alive() if self.serial_thread else False,
+            'serial_thread_alive': self.serial_thread.is_alive() if self.serial_thread else False,
+            'time_since_heartbeat': time_since_heartbeat,
             'connection_errors': self.connection_errors,
             'max_connection_errors': self.max_connection_errors,
-            'last_heartbeat': self.last_heartbeat,
-            'heartbeat_interval': self.heartbeat_interval,
-            'serial_port': self.config.get('serial_port', 'Unknown'),
-            'baud_rate': self.config.get('baud_rate', 'Unknown'),
-            'app_instances': list(self.app_instances.keys())
+            'heartbeat_interval': self.heartbeat_interval
         }
 
     def test_button_functionality(self, button_id: int = 0):

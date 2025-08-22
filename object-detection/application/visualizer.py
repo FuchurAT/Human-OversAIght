@@ -314,8 +314,9 @@ class DetectionVisualizer:
     
     def draw_detection_overlays(self, frame: np.ndarray, detections: List[Detection]) -> None:
         """Draw detection overlays on the frame"""
-        for detection in detections:
+        for i, detection in enumerate(detections):
             color = ColorManager.get_state_color(self.display_config.color_state, detection.confidence)
+            #print(f"Detection {i}: box={detection.box}, color={color}, color_state={self.display_config.color_state}")
             
             if self.display_config.solid_border:
                 x1, y1, x2, y2 = detection.box

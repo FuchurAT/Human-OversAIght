@@ -21,7 +21,7 @@ APPLICATIONS = {
     'app_02': {
         'name': 'Application 02', 
         'screen_id': 1,  # Secondary monitor
-        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS 2',
+        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
         'enabled': True
@@ -29,7 +29,7 @@ APPLICATIONS = {
     'app_03': {
         'name': 'Application 03',
         'screen_id': 0,  # Same screen as app_01 but different position
-        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS 3',
+        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
         'enabled': False  # Disabled by default

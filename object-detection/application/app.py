@@ -32,8 +32,11 @@ from application.button_handler import ButtonHandler
 
 try:
     from screeninfo import get_monitors
+    logging.info("Successfully imported screeninfo.get_monitors")
 except ImportError:
     get_monitors = None
+    logging.warning("screeninfo package not found. Multi-monitor support will be limited.")
+    logging.warning("Install with: pip install screeninfo")
 
 from config.classes import CLASSES
 
@@ -53,6 +56,15 @@ class VideoInferenceApp:
         
         # Initialize components
         self.display_config = DisplayConfig()
+        # Enable key features by default for better user experience
+        self.display_config.gradcam_enabled = True
+        self.display_config.show_legend = True
+        self.display_config.show_fps_info = True
+        self.display_config.enable_glitches = False
+        self.display_config.blur_boxes = True
+        self.display_config.show_enemy = False
+        self.display_config.solid_border = False
+        
         self.memory_manager = MemoryManager()
         self.box_manager = BoxManager()
         
@@ -77,6 +89,12 @@ class VideoInferenceApp:
         # Screen configuration
         self.screen_config = self._get_screen_config()
         
+        # Verify model is loaded
+        if hasattr(self, 'model') and self.model is not None:
+            logging.info(f"Model successfully loaded and ready for inference")
+        else:
+            logging.error("Model failed to load during initialization")
+        
         # Log initialization status
         logging.info(f"VideoInferenceApp initialized successfully")
         logging.info(f"  App ID: {self.app_id}")
@@ -89,11 +107,17 @@ class VideoInferenceApp:
     
     def _get_screen_config(self) -> dict:
         """Get screen configuration for this application"""
+        logging.info(f"Getting screen config for screen_id: {self.screen_id}")
+        logging.info(f"Available screen configs: {list(SCREEN_CONFIG.keys())}")
+        
         if self.screen_id in SCREEN_CONFIG:
-            return SCREEN_CONFIG[self.screen_id].copy()
+            config = SCREEN_CONFIG[self.screen_id].copy()
+            logging.info(f"Found screen config for screen_id {self.screen_id}: {config}")
+            return config
         else:
             # Fallback to default screen config
-            return {
+            logging.warning(f"Screen ID {self.screen_id} not found in SCREEN_CONFIG, using defaults")
+            fallback_config = {
                 'width': DEFAULT_WINDOW_WIDTH,
                 'height': DEFAULT_WINDOW_HEIGHT,
                 'x_offset': 0,
@@ -103,6 +127,8 @@ class VideoInferenceApp:
                 'maintain_aspect_ratio': DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO,
                 'center_video': DEFAULT_VIDEO_CENTER_ON_SCREEN
             }
+            logging.info(f"Using fallback config: {fallback_config}")
+            return fallback_config
     
     def set_button_handler(self, button_handler: ButtonHandler) -> None:
         """Set the button handler for this application instance"""
@@ -121,6 +147,7 @@ class VideoInferenceApp:
         """Initialize the YOLO model with proper error handling"""
         try:
             from ultralytics import YOLO
+            logging.info("Successfully imported ultralytics.YOLO")
         except ImportError:
             logging.error("ultralytics package not found. Please install it: pip install ultralytics")
             raise
@@ -129,12 +156,28 @@ class VideoInferenceApp:
             logging.error(f"Model not found: {self.model_path}")
             raise FileNotFoundError(f"Model not found: {self.model_path}")
         
+        logging.info(f"Model file exists: {self.model_path}")
+        logging.info(f"Model file size: {Path(self.model_path).stat().st_size} bytes")
+        
         # Add safe globals for PyTorch serialization
         self._add_safe_globals()
         
         # Create YOLO model with verbose=False to suppress output
+        logging.info("Creating YOLO model instance...")
         self.model = YOLO(self.model_path, verbose=False)
-        logging.info(f"Loaded model: {self.model_path}")
+        logging.info(f"Successfully loaded model: {self.model_path}")
+        
+        # Test the model with a dummy frame
+        try:
+            logging.info("Testing model with dummy frame...")
+            dummy_frame = np.zeros((640, 640, 3), dtype=np.uint8)
+            test_result = self.model(dummy_frame, verbose=False)
+            logging.info(f"Model test successful, result type: {type(test_result)}")
+            if hasattr(test_result, 'boxes'):
+                logging.info(f"Model has boxes attribute: {test_result.boxes is not None}")
+        except Exception as e:
+            logging.warning(f"Model test failed: {e}")
+            # Don't raise here, just log the warning
     
     def _add_safe_globals(self) -> None:
         """Add safe globals for PyTorch serialization"""
@@ -161,30 +204,52 @@ class VideoInferenceApp:
             logging.warning("Received None frame in _process_frame")
             return [], 0.0
         
+        # Check if model is loaded
+        if not hasattr(self, 'model') or self.model is None:
+            logging.error("Model not initialized in _process_frame")
+            return [], 0.0
+        
         # Memory cleanup
         self.memory_manager.cleanup_memory()
         
         # Run inference with output suppression
         inf_start = time.time()
-        # Temporarily redirect stdout and stderr to suppress YOLO output
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            results = self.model(frame, conf=0.15, verbose=False)
-        inf_time = (time.time() - inf_start) * 1000  # ms
-        
-        # Extract detections
-        boxes = results[0].boxes
-        detections = []
-        
-        if boxes is not None:
-            for box in boxes:
-                conf = float(box.conf[0])
-                if conf < self.box_threshold:
-                    continue
-                class_id = int(box.cls[0])
-                xyxy = box.xyxy[0].cpu().numpy().astype(int)
-                detections.append(Detection(tuple(xyxy), conf, class_id))
-        
-        return detections, inf_time
+        try:
+            # Temporarily redirect stdout and stderr to suppress YOLO output
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                results = self.model(frame, conf=0.15, verbose=False)
+            inf_time = (time.time() - inf_start) * 1000  # ms
+            
+            # Debug: Check results
+            if results is None or len(results) == 0:
+                logging.debug("Model returned no results")
+                return [], inf_time
+            
+            # Extract detections
+            boxes = results[0].boxes
+            detections = []
+            
+            if boxes is not None and len(boxes) > 0:
+                logging.debug(f"Found {len(boxes)} raw detections")
+                for box in boxes:
+                    conf = float(box.conf[0])
+                    if conf < self.box_threshold:
+                        continue
+                    class_id = int(box.cls[0])
+                    xyxy = box.xyxy[0].cpu().numpy().astype(int)
+                    detections.append(Detection(tuple(xyxy), conf, class_id))
+                
+                logging.debug(f"Filtered to {len(detections)} detections above threshold {self.box_threshold}")
+            else:
+                logging.debug("No boxes found in results")
+            
+            return detections, inf_time
+            
+        except Exception as e:
+            logging.error(f"Error during model inference: {e}")
+            import traceback
+            logging.error(f"Inference traceback: {traceback.format_exc()}")
+            return [], 0.0
     
     def _prepare_display_frame(self, frame: np.ndarray, detections: List[Detection], 
                               gradcam_img: np.ndarray) -> np.ndarray:
@@ -195,24 +260,55 @@ class VideoInferenceApp:
             # Return a black frame as fallback
             return np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # Convert to grayscale and back to BGR (create a copy to avoid modifying original)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        frame_for_display = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        # Debug: Log detection count
+        logging.debug(f"Preparing display frame with {len(detections)} detections")
+        
+        # Use original frame instead of converting to grayscale to preserve colors for detection boxes
+        frame_for_display = frame.copy()
         
         # Filter overlapping detections
         filtered_detections = self.box_manager.filter_overlapping_boxes(detections)
+        logging.debug(f"After filtering: {len(filtered_detections)} detections")
         
         # Draw detection overlays
         frame_with_overlays = frame_for_display.copy()
-        self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+        try:
+            # Debug: Check if we have detections and if visualizer exists
+            #logging.info(f"Drawing detection overlays: {len(filtered_detections)} detections, visualizer: {self.visualizer is not None}")
+         
+            self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+            #logging.info(f"Successfully drew detection overlays for {len(filtered_detections)} detections")
+            
+                
+        except Exception as e:
+            logging.error(f"Error drawing detection overlays: {e}")
+            import traceback
+            logging.error(f"Overlay drawing traceback: {traceback.format_exc()}")
         
-        # Apply Grad-CAM if enabled
-        if self.display_config.gradcam_enabled:
+        # Apply Grad-CAM if enabled and if it's different from the original frame
+        if (self.display_config.gradcam_enabled and gradcam_img is not None and 
+            not np.array_equal(gradcam_img, frame)):
+            # Save frame before GradCAM
+            if filtered_detections:
+                logging.info(f"Saved frame before GradCAM")
+            
             frame_with_overlays = self._apply_gradcam_overlay(frame_with_overlays, filtered_detections, gradcam_img)
+            
+            # Save frame after GradCAM
+            if filtered_detections:
+                logging.info(f"Saved frame after GradCAM")
         
         # Draw glitches if enabled
         if self.display_config.enable_glitches:
+            # Save frame before glitches
+            if filtered_detections:
+                logging.info(f"Saved frame before glitches")
+            
             self.visualizer.draw_random_glitches(frame_with_overlays)
+            
+            # Save frame after glitches
+            if filtered_detections:
+                logging.info(f"Saved frame after glitches")
         
         return frame_with_overlays
     
@@ -289,46 +385,109 @@ class VideoInferenceApp:
                 y_offset=LEGEND_WINDOW_HEIGHT//2 + 60
             )
 
-        if monitors and len(monitors) > 1:
+        # Use screen configuration for legend positioning
+        if self.screen_id == 1 and self.screen_config:  # Secondary monitor
+            try:
+                # Create legend window in normal mode first for positioning
+                cv2.namedWindow("Legend Display", cv2.WINDOW_NORMAL)
+                
+                # Position legend window based on screen configuration
+                x_offset = self.screen_config.get('x_offset', 1920)  # Default to right of primary
+                y_offset = self.screen_config.get('y_offset', 0)
+                
+                # Set window size
+                cv2.resizeWindow("Legend Display", LEGEND_WINDOW_WIDTH, LEGEND_WINDOW_HEIGHT)
+                
+                # Move window to correct position
+                cv2.moveWindow("Legend Display", x_offset, y_offset)
+                logging.info(f"Positioned legend window at ({x_offset}, {y_offset})")
+                
+                # Force window to appear at the correct position
+                cv2.imshow("Legend Display", text_frame)
+                cv2.waitKey(1)
+                
+                # Now set fullscreen properties
+                cv2.setWindowProperty("Legend Display", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                
+            except Exception as e:
+                logging.warning(f"Failed to position legend window: {e}")
+                # Fallback to simple fullscreen
+                cv2.namedWindow("Legend Display", cv2.WND_PROP_FULLSCREEN)
+                cv2.imshow("Legend Display", text_frame)
+        elif monitors and len(monitors) > 1:
+            # Fallback to monitor-based positioning if screen config not available
             monitor_2 = monitors[1]
             cv2.namedWindow("Legend Display", cv2.WND_PROP_FULLSCREEN)
             cv2.moveWindow("Legend Display", monitor_2.x, monitor_2.y)
             cv2.setWindowProperty("Legend Display", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
             cv2.imshow("Legend Display", text_frame)
         else:
+            # Single monitor or no screen config
             cv2.namedWindow("Legend Display", cv2.WINDOW_NORMAL)
             cv2.imshow("Legend Display", text_frame)
     
     def _setup_fullscreen_window(self, window_name: str) -> None:
         """Setup fullscreen window with proper properties and screen positioning"""
-        cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
+        # Log screen configuration for debugging
+        logging.info(f"Setting up fullscreen window '{window_name}' for app {self.app_id}")
+        logging.info(f"Screen ID: {self.screen_id}")
+        logging.info(f"Screen config: {self.screen_config}")
         
+        # Create window in normal mode first for positioning
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        
+        # Position window based on screen configuration BEFORE going fullscreen
+        if self.screen_config and 'x_offset' in self.screen_config and 'y_offset' in self.screen_config:
+            try:
+                # Set window size first to ensure proper positioning
+                window_width = self.screen_config.get('width', DEFAULT_WINDOW_WIDTH)
+                window_height = self.screen_config.get('height', DEFAULT_WINDOW_HEIGHT)
+                cv2.resizeWindow(window_name, window_width, window_height)
+                logging.info(f"Resized window to {window_width}x{window_height}")
+                
+                # Move window to correct position
+                x_offset = self.screen_config['x_offset']
+                y_offset = self.screen_config['y_offset']
+                cv2.moveWindow(window_name, x_offset, y_offset)
+                logging.info(f"Positioned window '{window_name}' at ({x_offset}, {y_offset})")
+                
+                # Force window to appear at the correct position
+                dummy = np.zeros((100, 100, 3), dtype=np.uint8)
+                cv2.imshow(window_name, dummy)
+                cv2.waitKey(1)
+                
+                # Additional positioning verification
+                logging.info(f"Window '{window_name}' should now be at position ({x_offset}, {y_offset})")
+                
+            except Exception as e:
+                logging.warning(f"Failed to position window: {e}")
+                logging.warning(f"Screen config: {self.screen_config}")
+        else:
+            logging.warning(f"No screen configuration found for screen_id {self.screen_id}")
+            logging.warning(f"Available screen configs: {list(SCREEN_CONFIG.keys())}")
+        
+        # Now set fullscreen properties
         try:
             cv2.setWindowProperty(window_name, cv2.WND_PROP_BORDERLESS, 1)
         except Exception:
             pass
         
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        
-        # Position window based on screen configuration
-        if self.screen_config and 'x_offset' in self.screen_config and 'y_offset' in self.screen_config:
-            try:
-                cv2.moveWindow(window_name, self.screen_config['x_offset'], self.screen_config['y_offset'])
-                logging.info(f"Positioned window '{window_name}' at ({self.screen_config['x_offset']}, {self.screen_config['y_offset']})")
-            except Exception as e:
-                logging.warning(f"Failed to position window: {e}")
         
         # Force window to appear and go fullscreen
         dummy = np.zeros((100, 100, 3), dtype=np.uint8)
         cv2.imshow(window_name, dummy)
         cv2.waitKey(1)
         
+        # Final fullscreen setup
         try:
             cv2.setWindowProperty(window_name, cv2.WND_PROP_BORDERLESS, 1)
         except Exception:
             pass
         
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        
+        logging.info(f"Fullscreen window '{window_name}' setup complete")
     
     def _handle_key_input(self, key: int, cap, out_writer) -> Tuple[bool, bool]:
         """Handle keyboard input and return (should_exit, should_next_video)"""
@@ -406,7 +565,7 @@ class VideoInferenceApp:
         except Exception as e:
             logging.warning(f"Resource cleanup failed: {e}")
     
-    def run(self) -> None:
+    def run(self, stop_event=None) -> None:
         """Main application loop"""
         # Initialize button handler for backward compatibility (single app mode)
         self._initialize_button_handler()
@@ -415,7 +574,17 @@ class VideoInferenceApp:
         mp4_files = [file for file in os.listdir(self.video_path) if file.endswith('.mp4')]
 
         while True:  # Loop forever over the videos
+            # Check stop event if provided (for multi-app mode)
+            if stop_event and stop_event.is_set():
+                logging.info(f"Stop signal received for app {self.app_id}")
+                break
+                
             for mp4 in mp4_files:
+                # Check stop event before processing each video
+                if stop_event and stop_event.is_set():
+                    logging.info(f"Stop signal received for app {self.app_id}")
+                    return
+                    
                 print(f"Processing: {mp4}")
                 video_file_path = os.path.join(self.video_path, mp4)
                 
@@ -471,6 +640,19 @@ class VideoInferenceApp:
 
                 try:
                     while True:
+                        # Check stop event before processing each frame
+                        if stop_event and stop_event.is_set():
+                            logging.info(f"Stop signal received for app {self.app_id}")
+                            # Clean up current video resources
+                            if out_writer:
+                                out_writer.release()
+                            cap.release()
+                            # Close OpenCV windows
+                            cv2.destroyAllWindows()
+                            # Clean up resources
+                            self._cleanup_resources()
+                            return
+                            
                         ret, frame = cap.read()
                         frame_count += 1
                         
@@ -485,6 +667,16 @@ class VideoInferenceApp:
                             logging.warning(f"Frame {frame_count} is None despite ret={ret}")
                             break
                         
+                        # Check stop event again after frame read
+                        if stop_event and stop_event.is_set():
+                            logging.info(f"Stop signal received for app {self.app_id} after frame read")
+                            if out_writer:
+                                out_writer.release()
+                            cap.release()
+                            cv2.destroyAllWindows()
+                            self._cleanup_resources()
+                            return
+                        
                         # Debug: Check frame properties
                         if frame_count == 1:
                             print(f"First frame: shape={frame.shape}, dtype={frame.dtype}")
@@ -492,7 +684,25 @@ class VideoInferenceApp:
                         # Process frame
                         detections, inf_time = self._process_frame(frame)
                         
+                        # Debug: Log detection results
+                        if frame_count % 30 == 0:  # Every 30 frames
+                            logging.info(f"Frame {frame_count}: {len(detections)} detections, inference time: {inf_time:.1f}ms")
+                            if detections:
+                                for i, det in enumerate(detections[:3]):  # Log first 3 detections
+                                    logging.info(f"  Detection {i}: class={det.class_id}, conf={det.confidence:.3f}, box={det.box}")
+                        
+                        # Check stop event after frame processing
+                        if stop_event and stop_event.is_set():
+                            logging.info(f"Stop signal received for app {self.app_id} after frame processing")
+                            if out_writer:
+                                out_writer.release()
+                            cap.release()
+                            cv2.destroyAllWindows()
+                            self._cleanup_resources()
+                            return
+                        
                         # Generate Grad-CAM (with additional safety check)
+                        gradcam_img = None  # Initialize gradcam_img
                         if frame is not None and self.gradcam_processor is not None:
                             logging.debug(f"Processing frame {frame_count} with shape {frame.shape}")
                             try:
@@ -504,13 +714,9 @@ class VideoInferenceApp:
                                     else:
                                         logging.warning("Failed to reload GradCAM processor")
                                         gradcam_img = frame.copy()
-                                        continue
                                 
-                                # Dynamically adjust frame skip threshold based on performance
-                                if inf_time > 100:  # If inference is slow (>100ms)
-                                    self.gradcam_processor.set_frame_skip_threshold(10)
-                                elif inf_time < 50:  # If inference is fast (<50ms)
-                                    self.gradcam_processor.set_frame_skip_threshold(3)
+                                # Frame skip threshold adjustment removed to fix synchronization issues
+                                # GradCAM now processes every frame for better sync
                                 
                                 gradcam_img = self.gradcam_processor.process_gradcam(
                                     frame, detections, self.display_config.gradcam_in_box_only
@@ -549,12 +755,25 @@ class VideoInferenceApp:
                             print(f"Frame {frame_count}: shape={display_img.shape}, detections={len(detections)}, inf_time={inf_time:.1f}ms")
                             print(f"Window state: first_frame={first_frame}, fullscreen_size={fullscreen_size}")
                         
-                        # Handle key input with proper timing
+                        # Handle key input with proper timing and stop event check
                         try:
-                            key = cv2.waitKey(max(1, wait_ms)) & 0xFF
+                            # Use shorter wait time to be more responsive to stop events
+                            key_wait_time = min(wait_ms, 50)  # Max 50ms wait
+                            key = cv2.waitKey(key_wait_time) & 0xFF
                         except Exception as e:
                             logging.warning(f"Error handling key input: {e}")
                             key = 0
+                        
+                        # Check stop event again before key handling
+                        if stop_event and stop_event.is_set():
+                            logging.info(f"Stop signal received for app {self.app_id} during key handling")
+                            if out_writer:
+                                out_writer.release()
+                            cap.release()
+                            cv2.destroyAllWindows()
+                            self._cleanup_resources()
+                            return
+                        
                         should_exit, should_next_video = self._handle_key_input(key, cap, out_writer)
                         
                         if should_exit:
@@ -565,6 +784,9 @@ class VideoInferenceApp:
                             return
                         elif should_next_video:
                             # Clean up current video resources but keep core components
+                            if out_writer:
+                                out_writer.release()
+                            cap.release()
                             self._cleanup_video_resources()
                             # Reset GradCAM state for next video
                             self._reset_gradcam_state()
@@ -573,7 +795,7 @@ class VideoInferenceApp:
                                 self.visualizer.reinitialize_audio()
                             # Reinitialize button handler for next video
                             if hasattr(self, 'button_handler'):
-                                if not self.button_handler.is_running:
+                                if not self.button_handler.get_running_status():
                                     logging.info("Button handler not running, restarting...")
                                     self.button_handler.restart()
                                 else:
@@ -652,6 +874,7 @@ class VideoInferenceApp:
     def _display_frame_fullscreen(self, window_name: str, display_img: np.ndarray, 
                                  first_frame: bool, fullscreen_size: Optional[Tuple[int, int]]) -> Tuple[bool, Optional[Tuple[int, int]]]:
         """Display frame in fullscreen with configurable sizing using screen configuration"""
+        debug = False
         if first_frame:
             # Use screen configuration for dimensions
             ww = self.screen_config.get('width', DEFAULT_WINDOW_WIDTH)
@@ -674,17 +897,17 @@ class VideoInferenceApp:
             center_video = self.screen_config.get('center_video', DEFAULT_VIDEO_CENTER_ON_SCREEN)
             
             # Debug logging for scaling
-            logging.info(f"Scaling: video={iw}x{ih}, screen={ww}x{wh}, mode={scale_mode}")
+            logging.info(f"Scaling: video={iw}x{ih}, screen={ww}x{wh}, mode={scale_mode}") if debug else None
             
             # Apply scaling based on configuration
             if scale_mode == 'original':
                 # Display original size
                 new_w, new_h = iw, ih
-                logging.info(f"Original mode: keeping video size {iw}x{ih}")
+                logging.info(f"Original mode: keeping video size {iw}x{ih}") if debug else None
             elif scale_mode == 'stretch':
                 # Stretch to fill entire window (may distort video)
                 new_w, new_h = ww, wh
-                logging.info(f"Stretch mode: stretching to screen size {ww}x{wh}")
+                logging.info(f"Stretch mode: stretching to screen size {ww}x{wh}") if debug else None
             else:  # 'fit' mode (default)
                 # Fit to fill screen while maintaining aspect ratio
                 if maintain_aspect_ratio:
@@ -694,13 +917,13 @@ class VideoInferenceApp:
                 # Apply multiplier to use more screen space
                 scale = scale * scale_multiplier
                 new_w, new_h = int(iw * scale), int(ih * scale)
-                logging.info(f"Fit mode: scale={scale:.3f}, multiplier={scale_multiplier}, final={new_w}x{new_h}")
+                logging.info(f"Fit mode: scale={scale:.3f}, multiplier={scale_multiplier}, final={new_w}x{new_h}") if debug else None
             
             # Resize the image
             resized_img = cv2.resize(display_img, (new_w, new_h))
             
             # Debug logging for final dimensions
-            logging.info(f"Final dimensions: original={iw}x{ih}, scaled={new_w}x{new_h}, screen={ww}x{wh}")
+            logging.info(f"Final dimensions: original={iw}x{ih}, scaled={new_w}x{new_h}, screen={ww}x{wh}")if debug else None
             
             if center_video:
                 # Center on black background
@@ -709,11 +932,11 @@ class VideoInferenceApp:
                 x_offset = (ww - new_w) // 2
                 
                 # Debug logging for positioning
-                logging.info(f"Positioning: screen={ww}x{wh}, video={new_w}x{new_h}, offsets=({x_offset}, {y_offset})")
+                logging.info(f"Positioning: screen={ww}x{wh}, video={new_w}x{new_h}, offsets=({x_offset}, {y_offset})") if debug else None
                 
                 # Ensure the video fits within the screen bounds
                 if x_offset < 0 or y_offset < 0:
-                    logging.warning(f"Video too large for screen: video={new_w}x{new_h}, screen={ww}x{wh}")
+                    logging.warning(f"Video too large for screen: video={new_w}x{new_h}, screen={ww}x{wh}") if debug else None
                     # Force video to fit within screen
                     if new_w > ww:
                         new_w = ww

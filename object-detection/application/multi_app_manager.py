@@ -1,9 +1,8 @@
 """
 Multi-Application Manager for Object Detection
-Manages multiple VideoInferenceApp instances running in separate threads.
+Manages multiple VideoInferenceApp instances in a single thread to prevent OpenCV conflicts.
 """
 
-import threading
 import logging
 import time
 import signal
@@ -13,21 +12,21 @@ from typing import Dict, List, Optional
 from config.config import APPLICATIONS, SCREEN_CONFIG
 from application.app import VideoInferenceApp
 from application.button_handler import ButtonHandler
+import cv2
 
 
 class MultiAppManager:
     """
-    Manages multiple object detection applications running in separate threads.
-    Provides centralized button handling and application lifecycle management.
+    Manages multiple object detection applications in a single thread.
+    Prevents OpenCV window conflicts and GPU resource issues.
     """
     
     def __init__(self):
         self.apps: Dict[str, VideoInferenceApp] = {}
-        self.app_threads: Dict[str, threading.Thread] = {}
-        self.app_stop_events: Dict[str, threading.Event] = {}
+        self.app_states: Dict[str, dict] = {}
         self.button_handler: Optional[ButtonHandler] = None
         self.is_running = False
-        self.shutdown_event = threading.Event()
+        self.shutdown_event = False
         
         # Signal handling
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -38,7 +37,7 @@ class MultiAppManager:
     def _signal_handler(self, signum: int, frame):
         """Handle system signals for graceful shutdown"""
         logging.info(f"Received signal {signum}, shutting down gracefully...")
-        self.shutdown_event.set()
+        self.shutdown_event = True
         self.stop_all_apps()
         sys.exit(0)
     
@@ -121,9 +120,19 @@ class MultiAppManager:
             # Add to button handler
             self.button_handler.add_app_instance(app_id, app)
             
-            # Store application
+            # Store application and initialize state
             self.apps[app_id] = app
-            self.app_stop_events[app_id] = threading.Event()
+            self.app_states[app_id] = {
+                'current_video_index': 0,
+                'video_files': video_files,
+                'cap': None,
+                'out_writer': None,
+                'frame_count': 0,
+                'first_frame': True,
+                'fullscreen_size': None,
+                'window_name': f'Object Detection - {app_id}',
+                'is_active': True
+            }
             
             logging.info(f"Application {app_id} initialized: {len(video_files)} video files found")
             return True
@@ -134,73 +143,225 @@ class MultiAppManager:
             logging.error(f"Traceback: {traceback.format_exc()}")
             return False
     
-    def start_all_apps(self) -> bool:
-        """Start all initialized applications in separate threads"""
+    def run_applications_single_thread(self) -> bool:
+        """Run all applications in a single thread to prevent OpenCV conflicts"""
         if not self.apps:
-            logging.error("No applications to start")
+            logging.error("No applications to run")
             return False
         
         try:
             self.is_running = True
+            logging.info("Starting applications in single-threaded mode...")
             
+            # Initialize video captures for all apps
             for app_id, app in self.apps.items():
-                if self._start_single_app(app_id, app):
-                    logging.info(f"Started application: {app_id}")
-                else:
-                    logging.error(f"Failed to start application: {app_id}")
+                self._initialize_app_video(app_id, app)
             
-            # Wait for all threads to start
-            time.sleep(1.0)
+            # Main processing loop
+            while self.is_running and not self.shutdown_event:
+                try:
+                    # Process one frame from each active application
+                    active_apps = [app_id for app_id, state in self.app_states.items() if state['is_active']]
+                    
+                    if not active_apps:
+                        logging.info("No active applications, stopping")
+                        break
+                    
+                    # Process frame from each app
+                    for app_id in active_apps:
+                        if not self._process_app_frame(app_id):
+                            # App finished or encountered error
+                            self.app_states[app_id]['is_active'] = False
+                    
+                    # Handle global key input and pass to individual apps
+                    # Use proper frame rate control based on video FPS
+                    wait_ms = 33  # Default to ~30 FPS if no specific FPS available
+                    if self.app_states:
+                        # Use the first app's FPS as reference
+                        first_app_state = next(iter(self.app_states.values()))
+                        if 'fps' in first_app_state and first_app_state['fps'] > 0:
+                            wait_ms = int(1000 / first_app_state['fps'])
+                    
+                    key = cv2.waitKey(wait_ms) & 0xFF
+                    if key == 27:  # ESC
+                        logging.info("ESC pressed, shutting down")
+                        break
+                    elif key == ord('q'):
+                        logging.info("Q pressed, shutting down")
+                        break
+                    elif key != 0:  # Pass non-zero keys to active applications
+                        # Pass key to all active applications for handling
+                        for app_id in active_apps:
+                            try:
+                                app = self.apps[app_id]
+                                app_state = self.app_states[app_id]
+                                # Handle key input for each app
+                                should_exit, should_next_video = app._handle_key_input(key, app_state['cap'], app_state['out_writer'])
+                                if should_exit:
+                                    logging.info(f"App {app_id} requested exit")
+                                    self.app_states[app_id]['is_active'] = False
+                                elif should_next_video:
+                                    logging.info(f"App {app_id} requested next video")
+                                    self._next_video_or_finish(app_id)
+                            except Exception as e:
+                                logging.warning(f"Error handling key input for app {app_id}: {e}")
+                    
+                    # Small delay to prevent busy waiting
+                    time.sleep(0.01)
+                    
+                except KeyboardInterrupt:
+                    logging.info("Keyboard interrupt received")
+                    break
+                except Exception as e:
+                    logging.error(f"Error in main processing loop: {e}")
+                    break
             
-            # Check if all threads are running
-            running_count = sum(1 for thread in self.app_threads.values() if thread.is_alive())
-            logging.info(f"Started {running_count}/{len(self.apps)} applications")
-            
-            return running_count > 0
+            logging.info("Main processing loop completed")
+            return True
             
         except Exception as e:
-            logging.error(f"Error starting applications: {e}")
+            logging.error(f"Error running applications: {e}")
             return False
     
-    def _start_single_app(self, app_id: str, app: VideoInferenceApp) -> bool:
-        """Start a single application in a separate thread"""
+    def _initialize_app_video(self, app_id: str, app: VideoInferenceApp):
+        """Initialize video capture for a specific application"""
         try:
-            # Create stop event
-            stop_event = self.app_stop_events[app_id]
+            state = self.app_states[app_id]
+            video_files = state['video_files']
             
-            # Create and start thread
-            thread = threading.Thread(
-                target=self._app_worker,
-                args=(app_id, app, stop_event),
-                daemon=True,
-                name=f"AppThread-{app_id}"
-            )
+            if state['current_video_index'] >= len(video_files):
+                logging.info(f"App {app_id}: All videos processed")
+                state['is_active'] = False
+                return
             
-            self.app_threads[app_id] = thread
-            thread.start()
+            video_file = video_files[state['current_video_index']]
+            video_path = Path(app.video_path) / video_file
+            
+            logging.info(f"App {app_id}: Initializing video {video_file}")
+            
+            # Open video capture
+            cap = cv2.VideoCapture(str(video_path))
+            if not cap.isOpened():
+                logging.error(f"App {app_id}: Could not open video {video_file}")
+                state['is_active'] = False
+                return
+            
+            # Get video properties
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            if fps <= 0:
+                fps = 25.0
+            
+            # Setup window
+            window_name = state['window_name']
+            app._setup_fullscreen_window(window_name)
+            
+            # Store capture
+            state['cap'] = cap
+            state['fps'] = fps
+            state['wait_ms'] = int(1000 / fps)
+            
+            logging.info(f"App {app_id}: Video initialized successfully")
+            
+        except Exception as e:
+            logging.error(f"Error initializing video for app {app_id}: {e}")
+            state['is_active'] = False
+    
+    def _process_app_frame(self, app_id: str) -> bool:
+        """Process a single frame from a specific application"""
+        try:
+            state = self.app_states[app_id]
+            app = self.apps[app_id]
+            
+            if not state['is_active'] or state['cap'] is None:
+                return False
+            
+            cap = state['cap']
+            
+            # Read frame
+            ret, frame = cap.read()
+            if not ret:
+                logging.info(f"App {app_id}: End of video reached")
+                self._next_video_or_finish(app_id)
+                return True
+            
+            # Process frame
+            detections, inf_time = app._process_frame(frame)
+            
+            # Generate Grad-CAM if enabled
+            gradcam_img = None
+            if app.display_config.gradcam_enabled and app.gradcam_processor is not None:
+                try:
+                    gradcam_img = app.gradcam_processor.process_gradcam(
+                        frame, detections, app.display_config.gradcam_in_box_only
+                    )
+                except Exception as e:
+                    logging.warning(f"App {app_id}: GradCAM processing failed: {e}")
+                    gradcam_img = frame.copy()
+            else:
+                gradcam_img = frame.copy()
+            
+            # Prepare display frame with proper GradCAM
+            display_img = app._prepare_display_frame(frame, detections, gradcam_img)
+            
+            # Display frame
+            window_name = state['window_name']
+            first_frame = state['first_frame']
+            fullscreen_size = state['fullscreen_size']
+            
+            try:
+                first_frame, fullscreen_size = app._display_frame_fullscreen(
+                    window_name, display_img, first_frame, fullscreen_size
+                )
+                state['first_frame'] = first_frame
+                state['fullscreen_size'] = fullscreen_size
+            except Exception as e:
+                logging.warning(f"App {app_id}: Error displaying frame: {e}")
+            
+            # Update frame count
+            state['frame_count'] += 1
+            
+            # Debug output every 30 frames
+            if state['frame_count'] % 30 == 0:
+                logging.debug(f"App {app_id}: Frame {state['frame_count']}, detections: {len(detections)}")
             
             return True
             
         except Exception as e:
-            logging.error(f"Error starting application {app_id}: {e}")
+            logging.error(f"Error processing frame for app {app_id}: {e}")
             return False
     
-    def _app_worker(self, app_id: str, app: VideoInferenceApp, stop_event: threading.Event):
-        """Worker thread for running an application"""
+    def _next_video_or_finish(self, app_id: str):
+        """Move to next video or finish application"""
         try:
-            logging.info(f"Application {app_id} worker thread started")
+            state = self.app_states[app_id]
+            app = self.apps[app_id]
             
-            # Run the application
-            app.run()
+            # Clean up current video
+            if state['cap']:
+                state['cap'].release()
+                state['cap'] = None
             
-            logging.info(f"Application {app_id} worker thread completed")
+            if state['out_writer']:
+                state['out_writer'].release()
+                state['out_writer'] = None
             
+            # Move to next video
+            state['current_video_index'] += 1
+            state['frame_count'] = 0
+            state['first_frame'] = True
+            state['fullscreen_size'] = None
+            
+            if state['current_video_index'] < len(state['video_files']):
+                # Initialize next video
+                self._initialize_app_video(app_id, app)
+            else:
+                # All videos processed
+                logging.info(f"App {app_id}: All videos completed")
+                state['is_active'] = False
+                
         except Exception as e:
-            logging.error(f"Error in application {app_id} worker thread: {e}")
-            import traceback
-            logging.error(f"Traceback: {traceback.format_exc()}")
-        finally:
-            logging.info(f"Application {app_id} worker thread stopped")
+            logging.error(f"Error moving to next video for app {app_id}: {e}")
+            state['is_active'] = False
     
     def stop_all_apps(self) -> None:
         """Stop all running applications"""
@@ -208,111 +369,51 @@ class MultiAppManager:
         
         self.is_running = False
         
-        # Signal all threads to stop
-        for app_id, stop_event in self.app_stop_events.items():
-            stop_event.set()
-            logging.info(f"Stop signal sent to application: {app_id}")
-        
-        # Wait for threads to finish
-        for app_id, thread in self.app_threads.items():
-            if thread.is_alive():
-                logging.info(f"Waiting for application {app_id} to stop...")
-                thread.join(timeout=5.0)
-                if thread.is_alive():
-                    logging.warning(f"Application {app_id} did not stop gracefully")
-                else:
-                    logging.info(f"Application {app_id} stopped")
+        # Clean up all video captures and writers
+        for app_id, state in self.app_states.items():
+            try:
+                if state['cap']:
+                    state['cap'].release()
+                if state['out_writer']:
+                    state['out_writer'].release()
+            except Exception as e:
+                logging.warning(f"Error cleaning up app {app_id}: {e}")
         
         # Stop button handler
         if self.button_handler:
-            self.button_handler.stop()
-            logging.info("Button handler stopped")
+            try:
+                self.button_handler.stop()
+                logging.info("Button handler stopped")
+            except Exception as e:
+                logging.warning(f"Error stopping button handler: {e}")
         
-        # Clean up resources
+        # Clean up app resources
         for app_id, app in self.apps.items():
             try:
                 app._cleanup_resources()
             except Exception as e:
                 logging.warning(f"Error cleaning up app {app_id}: {e}")
         
+        # Close all OpenCV windows
+        try:
+            cv2.destroyAllWindows()
+        except Exception as e:
+            logging.warning(f"Error closing OpenCV windows: {e}")
+        
         logging.info("All applications stopped")
-    
-    def stop_app(self, app_id: str) -> bool:
-        """Stop a specific application"""
-        if app_id not in self.apps:
-            logging.warning(f"Application {app_id} not found")
-            return False
-        
-        try:
-            logging.info(f"Stopping application: {app_id}")
-            
-            # Signal thread to stop
-            self.app_stop_events[app_id].set()
-            
-            # Wait for thread to finish
-            thread = self.app_threads.get(app_id)
-            if thread and thread.is_alive():
-                thread.join(timeout=5.0)
-                if thread.is_alive():
-                    logging.warning(f"Application {app_id} did not stop gracefully")
-                    return False
-            
-            # Clean up
-            app = self.apps[app_id]
-            app._cleanup_resources()
-            
-            # Remove from button handler
-            if self.button_handler:
-                self.button_handler.remove_app_instance(app_id)
-            
-            # Remove from tracking
-            del self.apps[app_id]
-            del self.app_threads[app_id]
-            del self.app_stop_events[app_id]
-            
-            logging.info(f"Application {app_id} stopped successfully")
-            return True
-            
-        except Exception as e:
-            logging.error(f"Error stopping application {app_id}: {e}")
-            return False
-    
-    def restart_app(self, app_id: str) -> bool:
-        """Restart a specific application"""
-        if app_id not in APPLICATIONS:
-            logging.error(f"Application {app_id} not found in configuration")
-            return False
-        
-        try:
-            logging.info(f"Restarting application: {app_id}")
-            
-            # Stop the app
-            if app_id in self.apps:
-                self.stop_app(app_id)
-            
-            # Reinitialize and start
-            app_config = APPLICATIONS[app_id]
-            if self._initialize_single_app(app_id, app_config):
-                return self._start_single_app(app_id, self.apps[app_id])
-            else:
-                return False
-                
-        except Exception as e:
-            logging.error(f"Error restarting application {app_id}: {e}")
-            return False
     
     def get_app_status(self) -> Dict[str, dict]:
         """Get status of all applications"""
         status = {}
         
         for app_id, app in self.apps.items():
-            thread = self.app_threads.get(app_id)
-            stop_event = self.app_stop_events.get(app_id)
+            state = self.app_states.get(app_id, {})
             
             status[app_id] = {
-                'running': thread.is_alive() if thread else False,
-                'thread_name': thread.name if thread else None,
-                'stop_requested': stop_event.is_set() if stop_event else False,
+                'running': state.get('is_active', False),
+                'current_video': state.get('current_video_index', 0),
+                'total_videos': len(state.get('video_files', [])),
+                'frame_count': state.get('frame_count', 0),
                 'app_id': app.app_id,
                 'screen_id': app.screen_id,
                 'video_path': app.video_path,
@@ -335,32 +436,14 @@ class MultiAppManager:
                 logging.error("Failed to initialize applications")
                 return
             
-            # Start all applications
-            if not self.start_all_apps():
-                logging.error("Failed to start applications")
-                return
+            logging.info("Multi-application system initialized successfully")
+            logging.info("Press Ctrl+C or ESC to stop all applications gracefully")
             
-            logging.info("Multi-application system started successfully")
+            # Run applications in single-threaded mode
+            self.run_applications_single_thread()
             
-            # Main loop - wait for shutdown signal
-            while not self.shutdown_event.is_set():
-                try:
-                    # Check if any apps have stopped unexpectedly
-                    for app_id, thread in self.app_threads.items():
-                        if not thread.is_alive() and self.is_running:
-                            logging.warning(f"Application {app_id} stopped unexpectedly")
-                            # Could implement auto-restart here if desired
-                    
-                    # Sleep briefly
-                    time.sleep(1.0)
-                    
-                except KeyboardInterrupt:
-                    logging.info("Keyboard interrupt received")
-                    break
-                except Exception as e:
-                    logging.error(f"Error in main loop: {e}")
-                    break
-            
+        except KeyboardInterrupt:
+            logging.info("Keyboard interrupt received - shutting down...")
         except Exception as e:
             logging.error(f"Error in multi-application manager: {e}")
             import traceback
