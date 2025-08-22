@@ -255,6 +255,77 @@ BUTTON_CONFIG = {
     'button_repeat_rate': 200,      # Milliseconds between repeated actions for held buttons
 }
 
+# LED Configuration
+LED_CONFIG = {
+    'enabled': True,                    # Enable LED control
+    'serial_port': '/dev/ttyUSB0',     # Serial port for Arduino Nano (LED control)
+    'baud_rate': 115200,               # Baud rate for LED communication
+    'update_interval_ms': 20,          # LED update interval (20ms = 50 FPS)
+    'default_brightness': 50,          # Default LED brightness (0-255)
+    'button_press_brightness': 255,    # Brightness when button is pressed (max brightness)
+    'feedback_type': 'brightness',     # Button press feedback type: 'brightness', 'pulse', 'fade'
+    'fade_duration_ms': 100,          # Duration of fade effects in milliseconds
+    'auto_dim': True,                  # Automatically dim LEDs after button press
+    'dim_delay_ms': 300,              # Delay before dimming after button press
+    'dim_to_brightness': 30,          # Brightness to dim to after button press
+}
+
+# LED-to-Button Mapping
+# Maps button indices (0-47) to LED indices (0-47)
+# If a button doesn't have a mapping, no LED will be controlled for that button
+# Example: Button 0 controls LED 5, Button 1 controls LED 12, etc.
+LED_BUTTON_MAPPING = {
+    # Button index: LED index
+    0: 5,  
+    1: 12,
+    2: 19,   
+    3: 26,  
+    4: 33,  
+    5: 40,   
+    6: 47,   
+    7: 6,   
+    8: 13,  
+    9: 20,  
+    10: 27, 
+    11: 34, 
+    12: 41, 
+    13: 7,   
+    14: 14, 
+    15: 21,
+    16: 28,  
+    17: 35,  
+    18: 42,  
+    19: 8,  
+    20: 15,  
+    21: 22, 
+    22: 29,
+    23: 36, 
+    24: 43,  
+    25: 9,   
+    26: 16,  
+    27: 23, 
+    28: 30, 
+    29: 37, 
+    30: 44,  
+    31: 10,  
+    32: 17,  
+    33: 24,  
+    34: 31,  
+    35: 38,  
+    36: 45,  
+    37: 11,  
+    38: 18,  
+    39: 25, 
+    40: 32, 
+    41: 39,
+    42: 46, 
+    43: 0,  
+    44: 1, 
+    45: 2,
+    46: 3, 
+    47: 4, 
+}
+
 # Button Action Definitions
 BUTTON_ACTIONS = {
     'exit': {'type': 'immediate', 'requires_confirmation': False},

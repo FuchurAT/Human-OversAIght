@@ -8,7 +8,9 @@ import threading
 import time
 import logging
 import serial
-from config.config import BUTTON_MAPPING, BUTTON_CONFIG, BUTTON_ACTIONS, APPLICATIONS
+from typing import Optional
+from config.config import BUTTON_MAPPING, BUTTON_CONFIG, BUTTON_ACTIONS, APPLICATIONS, LED_CONFIG, LED_BUTTON_MAPPING
+from .led_controller import LEDController
 
 
 class ButtonHandler:
@@ -50,6 +52,22 @@ class ButtonHandler:
         self.heartbeat_interval = 5.0  # Check connection every 5 seconds
         self.connection_errors = 0
         self.max_connection_errors = 3
+        
+        # LED Controller
+        self.led_controller = None
+        if LED_CONFIG.get('enabled', False):
+            try:
+                self.led_controller = LEDController(
+                    serial_port=LED_CONFIG.get('serial_port', '/dev/ttyUSB0'),
+                    baud_rate=LED_CONFIG.get('baud_rate', 115200)
+                )
+                # Set default brightness for all LEDs
+                default_brightness = LED_CONFIG.get('default_brightness', 50)
+                self.led_controller.set_all_leds(default_brightness)
+                logging.info("LED Controller initialized successfully")
+            except Exception as e:
+                logging.warning(f"Failed to initialize LED Controller: {e}")
+                self.led_controller = None
         
         logging.info("ButtonHandler initialized with multi-application support")
     
@@ -193,6 +211,12 @@ class ButtonHandler:
                 daemon=True
             )
             self.serial_thread.start()
+            
+            # Start LED controller if available
+            if self.led_controller:
+                self.led_controller.start_updates()
+                logging.info("LED controller started")
+            
             logging.info(f"Started button monitoring on {self.config['serial_port']}")
             return True
             
@@ -312,6 +336,10 @@ class ButtonHandler:
                             self._play_button_sound(button_id)
                         if self.config['enable_visual_feedback']:
                             self._show_button_feedback(button_id)
+                        
+                        # LED feedback for button press
+                        if self.led_controller:
+                            self._handle_led_feedback(button_id)
                     else:
                         logging.warning(f"Button action '{action_name}' has no callback implementation")
                 except Exception as e:
@@ -331,6 +359,56 @@ class ButtonHandler:
         """Show visual feedback for button press"""
         # TODO: Implement visual feedback
         pass
+    
+    def _handle_led_feedback(self, button_id: int):
+        """Handle LED feedback when a button is pressed"""
+        if not self.led_controller:
+            return
+        
+        # Check if this button has an LED mapping
+        if button_id not in LED_BUTTON_MAPPING:
+            logging.debug(f"No LED mapping for button {button_id}")
+            return
+        
+        # Get the LED index for this button
+        led_index = LED_BUTTON_MAPPING[button_id]
+        
+        try:
+            feedback_type = LED_CONFIG.get('feedback_type', 'brightness')
+            button_press_brightness = LED_CONFIG.get('button_press_brightness', 255)
+            fade_duration = LED_CONFIG.get('fade_duration_ms', 100)
+            auto_dim = LED_CONFIG.get('auto_dim', True)
+            dim_delay = LED_CONFIG.get('dim_delay_ms', 300)
+            dim_to_brightness = LED_CONFIG.get('dim_to_brightness', 30)
+            
+            # Get current LED brightness
+            current_brightness = self.led_controller.led_values[led_index]
+            
+            if feedback_type == 'brightness':
+                # Set LED to maximum brightness for button press
+                self.led_controller.set_led_brightness(led_index, button_press_brightness)
+                
+                # Auto-dim after delay if enabled
+                if auto_dim:
+                    def restore_brightness():
+                        time.sleep(dim_delay / 1000.0)
+                        # Fade back to dim brightness
+                        self.led_controller.fade_led(led_index, button_press_brightness, dim_to_brightness, fade_duration)
+                    
+                    threading.Thread(target=restore_brightness, daemon=True).start()
+                    
+            elif feedback_type == 'pulse':
+                # Quick pulse effect
+                self.led_controller.button_press_feedback(led_index, 'pulse')
+                
+            elif feedback_type == 'fade':
+                # Smooth fade effect
+                self.led_controller.button_press_feedback(led_index, 'fade')
+            
+            logging.debug(f"LED feedback applied for button {button_id} -> LED {led_index}: {feedback_type}")
+            
+        except Exception as e:
+            logging.warning(f"LED feedback failed for button {button_id} -> LED {led_index}: {e}")
     
     # Action callback implementations - now support multiple applications
     def _action_exit(self):
@@ -613,6 +691,11 @@ class ButtonHandler:
         logging.info("Stopping button handler...")
         self.is_running = False
         
+        # Stop LED controller if available
+        if self.led_controller:
+            self.led_controller.stop_updates()
+            logging.info("LED controller stopped")
+        
         # Wait for serial thread to finish
         if self.serial_thread and self.serial_thread.is_alive():
             self.serial_thread.join(timeout=2.0)
@@ -642,13 +725,28 @@ class ButtonHandler:
     
     def get_connection_status(self) -> dict:
         """Get detailed connection status"""
-        return {
+        status = {
             'is_running': self.is_running,
             'thread_alive': self.serial_thread.is_alive() if self.serial_thread else False,
             'serial_port': self.config.get('serial_port', 'Unknown'),
             'baud_rate': self.config.get('baud_rate', 'Unknown'),
             'app_instances': list(self.app_instances.keys())
         }
+        
+        # Add LED controller status if available
+        if self.led_controller:
+            status['led_controller'] = self.led_controller.get_connection_status()
+            status['led_mapping'] = {
+                'enabled': True,
+                'mapped_buttons': len(LED_BUTTON_MAPPING),
+                'total_buttons': 48,
+                'mapping': LED_BUTTON_MAPPING
+            }
+        else:
+            status['led_controller'] = {'enabled': False}
+            status['led_mapping'] = {'enabled': False}
+        
+        return status
     
     def get_button_state(self, button_id: int) -> bool:
         """Get current state of a button"""
@@ -697,6 +795,64 @@ class ButtonHandler:
         self.config.update(new_config)
         self.debounce_delay = self.config.get('debounce_time', 100) / 1000.0
         logging.info(f"ButtonHandler config updated, debounce delay: {self.debounce_delay}s")
+    
+    def get_led_mapping(self, button_id: int) -> Optional[int]:
+        """Get the LED index mapped to a button, or None if no mapping exists"""
+        return LED_BUTTON_MAPPING.get(button_id)
+    
+    def get_button_mapping(self, led_id: int) -> Optional[int]:
+        """Get the button index mapped to an LED, or None if no mapping exists"""
+        for button_id, led_index in LED_BUTTON_MAPPING.items():
+            if led_index == led_id:
+                return button_id
+        return None
+    
+    def set_led_brightness_for_button(self, button_id: int, brightness: int):
+        """Set LED brightness for a specific button using the mapping"""
+        if not self.led_controller:
+            return False
+        
+        led_index = self.get_led_mapping(button_id)
+        if led_index is None:
+            logging.debug(f"No LED mapping for button {button_id}")
+            return False
+        
+        try:
+            self.led_controller.set_led_brightness(led_index, brightness)
+            return True
+        except Exception as e:
+            logging.warning(f"Failed to set LED brightness for button {button_id}: {e}")
+            return False
+    
+    def test_led_mapping(self, button_id: int):
+        """Test LED mapping for a specific button by briefly lighting it up"""
+        if not self.led_controller:
+            return False
+        
+        led_index = self.get_led_mapping(button_id)
+        if led_index is None:
+            logging.debug(f"No LED mapping for button {button_id}")
+            return False
+        
+        try:
+            # Store current brightness
+            current_brightness = self.led_controller.led_values[led_index]
+            
+            # Flash the LED
+            self.led_controller.set_led_brightness(led_index, 255)
+            
+            # Restore after delay
+            def restore():
+                time.sleep(0.5)
+                self.led_controller.set_led_brightness(led_index, current_brightness)
+            
+            threading.Thread(target=restore, daemon=True).start()
+            logging.info(f"LED mapping test: Button {button_id} -> LED {led_index}")
+            return True
+            
+        except Exception as e:
+            logging.warning(f"LED mapping test failed for button {button_id}: {e}")
+            return False
 
     def restart_connection(self):
         """Restart the serial connection"""
