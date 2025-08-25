@@ -18,4 +18,4 @@ python -c "import YOLOv8_Explainer; print('✓ YOLOv8_Explainer is available')" 
 }
 
 # Run the inference script with all arguments passed through
-python inference.py "$@" 
+python run_multi_apps.py "$@" 

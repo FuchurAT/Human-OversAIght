@@ -12,50 +12,60 @@ ENABLE_GRAD_CAM_VIEW = True
 APPLICATIONS = {
     'app_01': {
         'name': 'Application 01',
-        'screen_id': 0,  # Primary monitor (0), secondary (1), etc.
-        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS',
+        'screen_id': 1,  # Primary monitor (0), secondary (1), etc.
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/vertical',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
         'enabled': True
     },
     'app_02': {
         'name': 'Application 02', 
-        'screen_id': 1,  # Secondary monitor
-        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS',
+        'screen_id': 2,  # Secondary monitor
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/horizontal',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
         'enabled': True
     },
     'app_03': {
         'name': 'Application 03',
-        'screen_id': 0,  # Same screen as app_01 but different position
-        'video_folder': '/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS',
+        'screen_id': 3,
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
-        'enabled': False  # Disabled by default
+        'enabled': True  
     }
 }
 
 # Screen Configuration
 # Maps screen IDs to display settings
 SCREEN_CONFIG = {
-    0: {  # Primary monitor
-        'width': 1920,
-        'height': 1080,
-        'x_offset': 0,
+    1: {  # Primary monitor
+        'width': 1080,
+        'height': 1920,
+        'x_offset': 1080,
         'y_offset': 0,
         'scale_mode': 'fit',
-        'scale_multiplier': 0.95,
+        'scale_multiplier': 1,
         'maintain_aspect_ratio': True,
         'center_video': True
     },
-    1: {  # Secondary monitor
+    2: {  # Secondary monitor
         'width': 1920,
         'height': 1080,
         'x_offset': 1920,  # Position to the right of primary
         'y_offset': 0,
         'scale_mode': 'fit',
-        'scale_multiplier': 0.9,
+        'scale_multiplier': 1,
+        'maintain_aspect_ratio': True,
+        'center_video': True
+    },
+    3: {  # Secondary monitor
+        'width': 1080,
+        'height': 1080,
+        'x_offset': 3840,  # Position to the right of primary
+        'y_offset': 0,
+        'scale_mode': 'fit',
+        'scale_multiplier': 1,
         'maintain_aspect_ratio': True,
         'center_video': True
     }
@@ -88,7 +98,7 @@ DEFAULT_GRADCAM_CONF_THRESHOLD = 0.25
 DEFAULT_GRADCAM_ALPHA = 1
 
 # Video Settings
-DEFAULT_FPS = 25
+DEFAULT_FPS = 20
 
 # Video Display Size Configuration
 # These settings control the size of the video display window
@@ -380,7 +390,7 @@ BUTTON_ACTIONS = {
 
 # Logging Configuration
 LOGGING_CONFIG = {
-    'level': 'INFO',
+    'level': 'ERROR',
     'format': '%(asctime)s - %(levelname)s - %(message)s',
     'date_format': '%Y-%m-%d %H:%M:%S'
 } 

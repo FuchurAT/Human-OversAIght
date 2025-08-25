@@ -38,35 +38,31 @@ class DetectionVisualizer:
         self.vocal_sound = None
         self.ambient_sounds = {}
         self.current_ambient = None
-        self.ambient_volume = 0.3  # Default volume for ambient sounds
+        self.ambient_volume = 1  # Default volume for ambient sounds
         self.ambient_cycle_timer = 0
         self.ambient_cycle_interval = 30  # Cycle every 30 seconds
         self.ambient_sound_index = 0
         
-        try:
-            pygame.mixer.init()
-            self.audio_available = True
-            print("Pygame mixer initialized successfully")
-        except Exception as e:
-            print(f"Warning: Could not initialize pygame mixer: {e}")
-            # Try alternative audio drivers
-            try:
-                pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-                self.audio_available = True
-                print("Pygame mixer initialized with alternative settings")
-            except Exception as e2:
-                print(f"Alternative initialization also failed: {e2}")
-                self.audio_available = False
+        # Try multiple audio initialization strategies for Bluetooth compatibility
+        self._initialize_audio_with_fallback()
         
         # Get the path to vocal.wav relative to the project root
         project_root = Path(__file__).parent.parent.parent
-        self.vocal_sound_path = project_root / "assets" / "sounds" / "buttons" / "vocal.wav"
+        self.button_sound_path = project_root / "assets" / "sounds" / "buttons"
+        self.button_sounds = list(self.button_sound_path.glob("*.wav"))
         
         # Initialize button sound (only if audio is available)
-        if self.audio_available and self.vocal_sound_path.exists():
+        if self.audio_available and self.button_sound_path.exists():
             try:
-                self.vocal_sound = pygame.mixer.Sound(str(self.vocal_sound_path))
-                print("Button sound (vocal.wav) loaded successfully")
+                for sound_file in self.button_sounds:
+                    try:
+                        sound_name = sound_file.stem
+                        print(f"Attempting to load: {sound_file}")
+                        # Load as pygame.mixer.Sound for compatibility
+                        self.button_sounds[sound_name] = pygame.mixer.Sound(str(sound_file))
+                        print(f"Successfully loaded button sound: {sound_name}")
+                    except Exception as e:
+                        print(f"Warning: Could not load button sound {sound_file.name}: {e}")
             except Exception as e:
                 print(f"Warning: Could not load button sound: {e}")
                 self.vocal_sound = None
@@ -77,6 +73,94 @@ class DetectionVisualizer:
         # Load ambient sound files (only if audio is available)
         if self.audio_available:
             self._load_ambient_sounds()
+    
+    def _initialize_audio_with_fallback(self) -> None:
+        """Try multiple audio initialization strategies for Bluetooth compatibility"""
+        print("Initializing audio with Bluetooth-compatible fallback strategies...")
+        
+        # Strategy 1: Standard initialization
+        try:
+            pygame.mixer.init()
+            self.audio_available = True
+            print("✓ Standard pygame mixer initialization successful")
+            return
+        except Exception as e:
+            print(f"✗ Standard initialization failed: {e}")
+        
+        # Strategy 2: Bluetooth-optimized settings (larger buffer, lower frequency)
+        try:
+            pygame.mixer.init(
+                frequency=22050,      # Lower frequency for Bluetooth stability
+                size=-16,            # 16-bit audio
+                channels=2,          # Stereo
+                buffer=1024,         # Larger buffer for Bluetooth latency
+                allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
+            )
+            self.audio_available = True
+            print("✓ Bluetooth-optimized initialization successful")
+            return
+        except Exception as e:
+            print(f"✗ Bluetooth-optimized initialization failed: {e}")
+        
+        # Strategy 3: Mono audio with very conservative settings
+        try:
+            pygame.mixer.init(
+                frequency=16000,      # Very low frequency
+                size=-16,            # 16-bit audio
+                channels=1,          # Mono (more stable for Bluetooth)
+                buffer=2048,         # Very large buffer
+                allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
+            )
+            self.audio_available = True
+            print("✓ Conservative mono initialization successful")
+            return
+        except Exception as e:
+            print(f"✗ Conservative mono initialization failed: {e}")
+        
+        # Strategy 4: Try with specific audio driver
+        try:
+            # Try ALSA driver specifically (common on Linux)
+            pygame.mixer.init(
+                frequency=22050,
+                size=-16,
+                channels=2,
+                buffer=512,
+                allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
+            )
+            self.audio_available = True
+            print("✓ ALSA driver initialization successful")
+            return
+        except Exception as e:
+            print(f"✗ ALSA driver initialization failed: {e}")
+        
+        # Strategy 5: Last resort - minimal settings
+        try:
+            pygame.mixer.init(
+                frequency=8000,       # Very low frequency
+                size=-8,             # 8-bit audio
+                channels=1,          # Mono
+                buffer=4096,         # Maximum buffer
+                allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
+            )
+            self.audio_available = True
+            print("✓ Minimal settings initialization successful")
+            return
+        except Exception as e:
+            print(f"✗ Minimal settings initialization failed: {e}")
+        
+        # All strategies failed
+        print("✗ All audio initialization strategies failed")
+        self.audio_available = False
+        
+        # Try to get system audio info for debugging
+        try:
+            import subprocess
+            result = subprocess.run(['aplay', '-l'], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("Available audio devices:")
+                print(result.stdout)
+        except:
+            pass
     
     def _load_ambient_sounds(self) -> None:
         """Load all available ambient sound files"""
@@ -144,18 +228,19 @@ class DetectionVisualizer:
             # Stop any currently playing ambient sound
             self.stop_ambient_sound()
             
-            # If no specific sound specified, use the first available one
-            if sound_name is None:
+            # Determine which sound to play
+            target_sound = sound_name
+            if target_sound is None:
                 if not self.ambient_sounds:
                     print("No ambient sounds loaded")
                     return False
-                sound_name = sound_name or list(self.ambient_sounds.keys())[0]
+                target_sound = list(self.ambient_sounds.keys())[0]
             
-            if sound_name not in self.ambient_sounds:
-                print(f"Ambient sound '{sound_name}' not found. Available: {list(self.ambient_sounds.keys())}")
+            if target_sound not in self.ambient_sounds:
+                print(f"Ambient sound '{target_sound}' not found. Available: {list(self.ambient_sounds.keys())}")
                 return False
             
-            sound_object = self.ambient_sounds[sound_name]
+            sound_object = self.ambient_sounds[target_sound]
             
             # Set volume if specified
             if volume is not None:
@@ -167,13 +252,13 @@ class DetectionVisualizer:
             # Play the ambient sound in a loop
             sound_object.play(-1)  # -1 means loop indefinitely
             
-            self.current_ambient = sound_name
+            self.current_ambient = target_sound
             # Update the index to match the current sound
-            if sound_name in self.ambient_sounds:
+            if target_sound in self.ambient_sounds:
                 sound_names = list(self.ambient_sounds.keys())
-                self.ambient_sound_index = sound_names.index(sound_name)
+                self.ambient_sound_index = sound_names.index(target_sound)
             
-            print(f"Started ambient sound: {sound_name} (volume: {self.ambient_volume:.2f})")
+            print(f"Started ambient sound: {target_sound} (volume: {self.ambient_volume:.2f})")
             return True
         
         return self._safe_audio_operation("start_ambient_sound", _start_sound)
@@ -551,23 +636,14 @@ class DetectionVisualizer:
                 self.audio_available = True
                 return True
             
-            # Try to initialize mixer
-            try:
-                pygame.mixer.init()
-                self.audio_available = True
-                print("Pygame mixer reinitialized successfully")
-            except Exception as e:
-                print(f"Standard reinitialization failed: {e}")
-                # Try alternative settings
-                pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-                self.audio_available = True
-                print("Pygame mixer reinitialized with alternative settings")
+            # Use the same fallback strategies as initial initialization
+            self._initialize_audio_with_fallback()
             
-            # Reload ambient sounds
-            if self.ambient_sounds_dir.exists():
+            # Reload ambient sounds if audio is now available
+            if self.audio_available and self.ambient_sounds_dir.exists():
                 self._load_ambient_sounds()
             
-            return True
+            return self.audio_available
             
         except Exception as e:
             print(f"Warning: Could not reinitialize pygame mixer: {e}")

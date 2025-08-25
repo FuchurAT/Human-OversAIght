@@ -8,7 +8,7 @@ import time
 import signal
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from config.config import APPLICATIONS, SCREEN_CONFIG
 from application.app import VideoInferenceApp
 from application.button_handler import ButtonHandler
