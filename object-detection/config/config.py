@@ -276,7 +276,7 @@ LED_CONFIG = {
     'feedback_type': 'brightness',     # Button press feedback type: 'brightness', 'pulse', 'fade'
     'fade_duration_ms': 100,          # Duration of fade effects in milliseconds
     'auto_dim': True,                  # Automatically dim LEDs after button press
-    'dim_delay_ms': 300,              # Delay before dimming after button press
+    'dim_delay_ms': 100,              # Delay before dimming after button press
     'dim_to_brightness': 30,          # Brightness to dim to after button press
 }
 
@@ -284,56 +284,58 @@ LED_CONFIG = {
 # Maps button indices (0-47) to LED indices (0-47)
 # If a button doesn't have a mapping, no LED will be controlled for that button
 # Example: Button 0 controls LED 5, Button 1 controls LED 12, etc.
+
+#42 and 12 are wrong
 LED_BUTTON_MAPPING = {
-    # Button index: LED index
-    0: 5,  
+    # Button index: LED index (sorted by button index)
+    0: 36, 
     1: 12,
-    2: 19,   
-    3: 26,  
-    4: 33,  
-    5: 40,   
-    6: 47,   
-    7: 6,   
-    8: 13,  
-    9: 20,  
+    2: 38,  
+    3: 39,
+    4: 40,  
+    5: 41, 
+    6: 42,   
+    7: 43,   
+    8: 44,  
+    9: 45,  
     10: 27, 
     11: 34, 
-    12: 41, 
-    13: 7,   
-    14: 14, 
-    15: 21,
+    12: 25, 
+    13: 34, 
+    14: 33,   
+    15: 32, 
     16: 28,  
     17: 35,  
     18: 42,  
     19: 8,  
     20: 15,  
-    21: 22, 
+    21: 4, 
     22: 29,
-    23: 36, 
+    23: 5,  
     24: 43,  
-    25: 9,   
+    25: 6,
     26: 16,  
-    27: 23, 
+    27: 7,  
     28: 30, 
     29: 37, 
     30: 44,  
-    31: 10,  
-    32: 17,  
+    31: 6,   
+    32: 2,  
     33: 24,  
-    34: 31,  
-    35: 38,  
-    36: 45,  
-    37: 11,  
-    38: 18,  
-    39: 25, 
-    40: 32, 
-    41: 39,
+    34: 3,  
+    35: 1,   
+    36: 23, 
+    37: 15,
+    38: 22,
+    39: 14, 
+    40: 21,
+    41: 13,  
     42: 46, 
-    43: 0,  
-    44: 1, 
-    45: 2,
-    46: 3, 
-    47: 4, 
+    43: 12,  
+    44: 19, 
+    45: 11,  
+    46: 18,  
+    47: 10, 
 }
 
 # Button Action Definitions

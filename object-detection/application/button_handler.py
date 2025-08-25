@@ -337,6 +337,7 @@ class ButtonHandler:
                         if self.config['enable_visual_feedback']:
                             self._show_button_feedback(button_id)
                         
+                        print(f"button_id: {button_id}")
                         # LED feedback for button press
                         if self.led_controller:
                             self._handle_led_feedback(button_id)
@@ -373,6 +374,8 @@ class ButtonHandler:
         # Get the LED index for this button
         led_index = LED_BUTTON_MAPPING[button_id]
         
+        print(f"button_id: {button_id}, led_index: {led_index}")
+
         try:
             feedback_type = LED_CONFIG.get('feedback_type', 'brightness')
             button_press_brightness = LED_CONFIG.get('button_press_brightness', 255)
@@ -382,7 +385,7 @@ class ButtonHandler:
             dim_to_brightness = LED_CONFIG.get('dim_to_brightness', 30)
             
             # Get current LED brightness
-            current_brightness = self.led_controller.led_values[led_index]
+            #current_brightness = self.led_controller.led_values[led_index]
             
             if feedback_type == 'brightness':
                 # Set LED to maximum brightness for button press
