@@ -57,6 +57,7 @@ class DetectionVisualizer:
         self.ambient_sounds = {}
         self.current_ambient = None
         self.ambient_volume = 1  # Default volume for ambient sounds
+        self.volume_amplification = 1  # Volume boost multiplier for louder sounds
         self.ambient_cycle_timer = 0
         self.ambient_cycle_interval = 30  # Cycle every 30 seconds
         self.ambient_sound_index = 0
@@ -141,9 +142,9 @@ class DetectionVisualizer:
         try:
             pygame.mixer.init(
                 devicename=device,
-                frequency=16000,      # Very low frequency
+                frequency=22050,      # Very low frequency
                 size=-16,            # 16-bit audio
-                channels=1,          # Mono (more stable for Bluetooth)
+                channels=2,          # Mono (more stable for Bluetooth)
                 buffer=2048,         # Very large buffer
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -285,7 +286,7 @@ class DetectionVisualizer:
                 self.ambient_volume = max(0.0, min(1.0, volume))
             
             # Set volume for the sound object
-            sound_object.set_volume(self.ambient_volume)
+            sound_object.set_volume(self.ambient_volume * self.volume_amplification)
             
             # Play the ambient sound in a loop
             sound_object.play(-1)  # -1 means loop indefinitely
@@ -320,12 +321,41 @@ class DetectionVisualizer:
             
         try:
             self.ambient_volume = max(0.0, min(1.0, volume))
-            # Update volume for all ambient sounds
+            # Update volume for all ambient sounds with amplification
             for sound_object in self.ambient_sounds.values():
-                sound_object.set_volume(self.ambient_volume)
-            print(f"Ambient sound volume set to: {self.ambient_volume:.2f}")
+                sound_object.set_volume(self.ambient_volume * self.volume_amplification)
+            print(f"Ambient sound volume set to: {self.ambient_volume:.2f} (with {self.volume_amplification:.1f}x amplification)")
         except Exception as e:
             print(f"Error setting ambient sound volume: {e}")
+    
+    def set_volume_amplification(self, amplification: float) -> None:
+        """Set the volume amplification multiplier (1.0 = normal, 2.0 = 2x louder, etc.)"""
+        if not self.audio_available or not self.is_audio_safe():
+            return
+            
+        try:
+            # Allow amplification up to 5x for very quiet sounds
+            self.volume_amplification = max(1.0, min(5.0, amplification))
+            # Update volume for all ambient sounds with new amplification
+            for sound_object in self.ambient_sounds.values():
+                sound_object.set_volume(self.ambient_volume * self.volume_amplification)
+            print(f"Volume amplification set to: {self.volume_amplification:.1f}x")
+        except Exception as e:
+            print(f"Error setting volume amplification: {e}")
+    
+    def get_volume_amplification(self) -> float:
+        """Get the current volume amplification multiplier"""
+        return self.volume_amplification
+    
+    def boost_volume(self) -> None:
+        """Increase volume amplification by 0.5x (up to 5x max)"""
+        current = self.volume_amplification
+        self.set_volume_amplification(current + 0.5)
+    
+    def reduce_volume(self) -> None:
+        """Decrease volume amplification by 0.5x (down to 1x min)"""
+        current = self.volume_amplification
+        self.set_volume_amplification(current - 0.5)
     
     def get_available_ambient_sounds(self) -> List[str]:
         """Get list of available ambient sound names"""
