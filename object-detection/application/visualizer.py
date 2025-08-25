@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import time
 import pygame
+import pygame._sdl2.audio as sdl2_audio
 from pathlib import Path
 from typing import Dict, Tuple, List
 from config.config import (
@@ -18,6 +19,23 @@ from config.config import (
 from application.models import Detection, DisplayConfig
 from application.color_manager import ColorManager
 
+def get_devices(capture_devices: bool = False) -> Tuple[str, ...]:
+    init_by_me = not pygame.mixer.get_init()
+    if init_by_me:
+        pygame.mixer.init()
+    devices = tuple(sdl2_audio.get_audio_device_names(capture_devices))
+    if init_by_me:
+        pygame.mixer.quit()
+    return devices
+
+devices = get_devices()
+
+if not devices:
+    raise RuntimeError("No device!")
+device = devices[2]
+
+print(devices)
+print(f"Selected audio device: {device}")
 
 class DetectionVisualizer:
     """Handles visualization of detections and overlays"""
@@ -67,6 +85,23 @@ class DetectionVisualizer:
                 print(f"Warning: Could not load button sound: {e}")
                 self.vocal_sound = None
         
+        # Initialize button sounds dictionary for easy access
+        self.button_sounds_dict = {}
+        if self.audio_available and self.button_sound_path.exists():
+            try:
+                for sound_file in self.button_sounds:
+                    try:
+                        sound_name = sound_file.stem
+                        print(f"Attempting to load button sound: {sound_file}")
+                        # Load as pygame.mixer.Sound for compatibility
+                        self.button_sounds_dict[sound_name] = pygame.mixer.Sound(str(sound_file))
+                        print(f"Successfully loaded button sound: {sound_name}")
+                    except Exception as e:
+                        print(f"Warning: Could not load button sound {sound_file.name}: {e}")
+            except Exception as e:
+                print(f"Warning: Could not load button sound: {e}")
+                self.vocal_sound = None
+        
         # Initialize ambient sound paths
         self.ambient_sounds_dir = project_root / "assets" / "sounds" / "ambient"
         
@@ -80,7 +115,7 @@ class DetectionVisualizer:
         
         # Strategy 1: Standard initialization
         try:
-            pygame.mixer.init()
+            pygame.mixer.init(devicename=device)
             self.audio_available = True
             print("✓ Standard pygame mixer initialization successful")
             return
@@ -90,6 +125,7 @@ class DetectionVisualizer:
         # Strategy 2: Bluetooth-optimized settings (larger buffer, lower frequency)
         try:
             pygame.mixer.init(
+                devicename=device,
                 frequency=22050,      # Lower frequency for Bluetooth stability
                 size=-16,            # 16-bit audio
                 channels=2,          # Stereo
@@ -97,7 +133,6 @@ class DetectionVisualizer:
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
             self.audio_available = True
-            print("✓ Bluetooth-optimized initialization successful")
             return
         except Exception as e:
             print(f"✗ Bluetooth-optimized initialization failed: {e}")
@@ -105,6 +140,7 @@ class DetectionVisualizer:
         # Strategy 3: Mono audio with very conservative settings
         try:
             pygame.mixer.init(
+                devicename=device,
                 frequency=16000,      # Very low frequency
                 size=-16,            # 16-bit audio
                 channels=1,          # Mono (more stable for Bluetooth)
@@ -121,6 +157,7 @@ class DetectionVisualizer:
         try:
             # Try ALSA driver specifically (common on Linux)
             pygame.mixer.init(
+                devicename=device,
                 frequency=22050,
                 size=-16,
                 channels=2,
@@ -136,9 +173,10 @@ class DetectionVisualizer:
         # Strategy 5: Last resort - minimal settings
         try:
             pygame.mixer.init(
+                devicename=device,
                 frequency=8000,       # Very low frequency
                 size=-8,             # 8-bit audio
-                channels=1,          # Mono
+                channels=2,          # Mono
                 buffer=4096,         # Maximum buffer
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -379,6 +417,67 @@ class DetectionVisualizer:
             'all_sounds': sound_names
         }
     
+    def play_button_sound(self, sound_name: str = None, volume: float = 1.0) -> bool:
+        """Play a button sound effect"""
+        if not self.audio_available or not self.button_sounds_dict:
+            print("No button sounds available")
+            return False
+        
+        # If no specific sound is requested, play a random one
+        if sound_name is None:
+            available_sounds = list(self.button_sounds_dict.keys())
+            if available_sounds:
+                sound_name = available_sounds[0]  # Default to first sound
+            else:
+                print("No button sounds loaded")
+                return False
+        
+        if sound_name not in self.button_sounds_dict:
+            print(f"Button sound '{sound_name}' not found. Available: {list(self.button_sounds_dict.keys())}")
+            return False
+        
+        try:
+            sound_object = self.button_sounds_dict[sound_name]
+            sound_object.set_volume(volume)
+            sound_object.play()
+            print(f"Playing button sound: {sound_name}")
+            return True
+        except Exception as e:
+            print(f"Error playing button sound {sound_name}: {e}")
+            return False
+    
+    def get_available_button_sounds(self) -> List[str]:
+        """Get list of available button sound names"""
+        return list(self.button_sounds_dict.keys())
+    
+    def set_button_sound_volume(self, volume: float) -> None:
+        """Set the volume of button sounds (0.0 to 1.0)"""
+        if not self.audio_available or not self.button_sounds_dict:
+            return
+            
+        try:
+            volume = max(0.0, min(1.0, volume))
+            # Update volume for all button sounds
+            for sound_object in self.button_sounds_dict.values():
+                sound_object.set_volume(volume)
+            print(f"Button sound volume set to: {volume:.2f}")
+        except Exception as e:
+            print(f"Error setting button sound volume: {e}")
+    
+    def play_random_button_sound(self, volume: float = 1.0) -> bool:
+        """Play a random button sound effect"""
+        if not self.audio_available or not self.button_sounds_dict:
+            print("No button sounds available")
+            return False
+        
+        try:
+            import random
+            sound_name = random.choice(list(self.button_sounds_dict.keys()))
+            return self.play_button_sound(sound_name, volume)
+        except Exception as e:
+            print(f"Error playing random button sound: {e}")
+            return False
+    
     def ensure_ambient_playing(self) -> None:
         """Ensure ambient sound is playing, restart if it stopped"""
         if not self.audio_available or not self.ambient_sounds:
@@ -588,19 +687,23 @@ class DetectionVisualizer:
                 self.display_config.color_state = 'red'
             self.display_config.show_enemy = not self.display_config.show_enemy
             self.display_config.solid_border = not self.display_config.solid_border
-            if self.audio_available and self.vocal_sound and self.is_audio_safe():
-                try:
-                    self.vocal_sound.play()
-                except Exception as e:
-                    print(f"Error playing vocal sound: {e}")
-                    self.disable_audio()
+            
+            # Play button sound when toggling display mode
+            if self.audio_available and self.is_audio_safe():
+                self.play_button_sound()
         elif key == ord('g') and ENABLE_GRAD_CAM_VIEW:  # 'g' key to toggle Grad-CAM
             if app_instance:
                 app_instance.display_config.gradcam_enabled = not app_instance.display_config.gradcam_enabled
                 print(f"Grad-CAM {'enabled' if app_instance.display_config.gradcam_enabled else 'disabled'}")
+                # Play button sound when toggling Grad-CAM
+                if self.audio_available and self.is_audio_safe():
+                    self.play_button_sound()
         elif key == ord('w'):
             app_instance.display_config.enable_glitches = not app_instance.display_config.enable_glitches
             print(f"Glitches {'enabled' if app_instance.display_config.enable_glitches else 'disabled'}")
+            # Play button sound when toggling glitches
+            if self.audio_available and self.is_audio_safe():
+                self.play_button_sound()
     
     def update_display_config(self, new_config: DisplayConfig) -> None:
         """Update the display configuration"""
