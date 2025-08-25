@@ -32,7 +32,7 @@ devices = get_devices()
 
 if not devices:
     raise RuntimeError("No device!")
-device = devices[2]
+device = devices[1]
 
 print(devices)
 print(f"Selected audio device: {device}")
@@ -427,7 +427,9 @@ class DetectionVisualizer:
         if sound_name is None:
             available_sounds = list(self.button_sounds_dict.keys())
             if available_sounds:
-                sound_name = available_sounds[0]  # Default to first sound
+                import random
+                sound_name = random.choice(available_sounds)
+                print(f"Selected random button sound: {sound_name}")
             else:
                 print("No button sounds loaded")
                 return False
