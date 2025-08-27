@@ -32,7 +32,7 @@ devices = get_devices()
 
 if not devices:
     raise RuntimeError("No device!")
-device = devices[1]
+device = devices[0] #change back to device[1]
 
 print(devices)
 print(f"Selected audio device: {device}")

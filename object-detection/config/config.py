@@ -13,7 +13,7 @@ APPLICATIONS = {
     'app_01': {
         'name': 'Application 01',
         'screen_id': 1,  # Primary monitor (0), secondary (1), etc.
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/vertical',
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
         'enabled': True
@@ -21,7 +21,7 @@ APPLICATIONS = {
     'app_02': {
         'name': 'Application 02', 
         'screen_id': 2,  # Secondary monitor
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/horizontal',
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/vertical',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
         'enabled': True
@@ -29,7 +29,7 @@ APPLICATIONS = {
     'app_03': {
         'name': 'Application 03',
         'screen_id': 3,
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/horizontal',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
         'enabled': True  
@@ -40,9 +40,9 @@ APPLICATIONS = {
 # Maps screen IDs to display settings
 SCREEN_CONFIG = {
     1: {  # Primary monitor
-        'width': 1080,
-        'height': 1920,
-        'x_offset': 1080,
+        'width': 1920,
+        'height': 1080,
+        'x_offset': 1920,
         'y_offset': 0,
         'scale_mode': 'fit',
         'scale_multiplier': 1,
@@ -52,7 +52,7 @@ SCREEN_CONFIG = {
     2: {  # Secondary monitor
         'width': 1920,
         'height': 1080,
-        'x_offset': 1920,  # Position to the right of primary
+        'x_offset': 3840,  # 2688?
         'y_offset': 0,
         'scale_mode': 'fit',
         'scale_multiplier': 1,
@@ -60,9 +60,9 @@ SCREEN_CONFIG = {
         'center_video': True
     },
     3: {  # Secondary monitor
-        'width': 1080,
+        'width': 1920,
         'height': 1080,
-        'x_offset': 3840,  # Position to the right of primary
+        'x_offset': 5760,  # 3840
         'y_offset': 0,
         'scale_mode': 'fit',
         'scale_multiplier': 1,
@@ -141,53 +141,53 @@ DEFAULT_VIDEO_PATH = "/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS"
 BUTTON_MAPPING = {
     # All 48 buttons now act as space (toggle unmask/blur mode) for all applications
     0: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    1: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    2: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    1: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    2: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     3: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    4: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    5: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    4: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    5: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     6: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    7: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    8: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    7: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    8: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     9: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    10: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    11: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    10: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    11: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     12: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    13: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    14: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    13: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    14: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     15: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    16: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    17: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    16: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    17: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     18: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    19: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    20: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    19: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    20: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     21: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    22: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    23: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    22: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    23: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     24: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    25: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    26: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    25: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    26: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     27: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    28: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    29: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    28: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    29: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     30: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    31: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    32: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    31: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    32: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     33: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    34: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    35: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    34: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    35: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     36: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    37: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    38: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    37: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    38: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     39: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    40: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    41: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    40: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    41: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     42: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    43: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    44: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    43: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    44: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     45: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    46: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    47: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    46: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    47: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
 }
 
 # Original button mappings (commented out for reference)
@@ -285,11 +285,14 @@ LED_CONFIG = {
 # If a button doesn't have a mapping, no LED will be controlled for that button
 # Example: Button 0 controls LED 5, Button 1 controls LED 12, etc.
 
-#42 and 12 are wrong
+#42 and 12, 1 are wrongly mapped
+# 47?
+#missing led index: 0,9,17,20,26,31,47
+
 LED_BUTTON_MAPPING = {
     # Button index: LED index (sorted by button index)
     0: 36, 
-    1: 12,
+    1: 37,
     2: 38,  
     3: 39,
     4: 40,  
@@ -300,7 +303,7 @@ LED_BUTTON_MAPPING = {
     9: 45,  
     10: 27, 
     11: 34, 
-    12: 25, 
+    12: 35,
     13: 34, 
     14: 33,   
     15: 32, 
@@ -330,12 +333,12 @@ LED_BUTTON_MAPPING = {
     39: 14, 
     40: 21,
     41: 13,  
-    42: 46, 
+    42: 20,
     43: 12,  
     44: 19, 
     45: 11,  
     46: 18,  
-    47: 10, 
+    47: 9, 
 }
 
 # Button Action Definitions
