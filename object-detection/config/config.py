@@ -13,7 +13,7 @@ APPLICATIONS = {
     'app_01': {
         'name': 'Application 01',
         'screen_id': 1,  # Primary monitor (0), secondary (1), etc.
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/horizontal',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
         'enabled': True
@@ -29,7 +29,7 @@ APPLICATIONS = {
     'app_03': {
         'name': 'Application 03',
         'screen_id': 3,
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/horizontal',
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
         'enabled': True  
@@ -42,7 +42,7 @@ SCREEN_CONFIG = {
     1: {  # Primary monitor
         'width': 1920,
         'height': 1080,
-        'x_offset': 1920,
+        'x_offset': 0,
         'y_offset': 0,
         'scale_mode': 'fit',
         'scale_multiplier': 1,
@@ -52,7 +52,7 @@ SCREEN_CONFIG = {
     2: {  # Secondary monitor
         'width': 1920,
         'height': 1080,
-        'x_offset': 3840,  # 2688?
+        'x_offset': 1920,  # 2688?
         'y_offset': 0,
         'scale_mode': 'fit',
         'scale_multiplier': 1,
@@ -62,7 +62,7 @@ SCREEN_CONFIG = {
     3: {  # Secondary monitor
         'width': 1920,
         'height': 1080,
-        'x_offset': 5760,  # 3840
+        'x_offset': 3840,  # 3840?
         'y_offset': 0,
         'scale_mode': 'fit',
         'scale_multiplier': 1,
@@ -141,25 +141,25 @@ DEFAULT_VIDEO_PATH = "/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS"
 BUTTON_MAPPING = {
     # All 48 buttons now act as space (toggle unmask/blur mode) for all applications
     0: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    1: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    1: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_01'},
     2: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     3: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    4: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    4: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_02'},
     5: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     6: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    7: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    7: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_03'},
     8: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     9: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    10: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    10: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_02'},
     11: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     12: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    13: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    13: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_01'},
     14: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     15: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    16: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    16: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_02'},
     17: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     18: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    19: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    19: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_03'},
     20: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     21: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     22: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},

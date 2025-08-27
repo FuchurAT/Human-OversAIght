@@ -427,6 +427,27 @@ class ButtonHandler:
         if app_instance:
             logging.info("Next video requested via button")
             # Signal next video through app instance
+            if hasattr(app_instance, 'signal_next_video'):
+                try:
+                    app_instance.signal_next_video()
+                    logging.info(f"Next video signal sent to app {getattr(app_instance, 'app_id', 'unknown')}")
+                except Exception as e:
+                    logging.error(f"Error signaling next video to app instance: {e}")
+            else:
+                logging.warning("App instance does not have signal_next_video method")
+        
+        # For multi-app mode, signal through the manager if available
+        for app_id, app in self.app_instances.items():
+            try:
+                if hasattr(app, '_multi_app_manager'):
+                    manager = app._multi_app_manager
+                    if hasattr(manager, 'signal_next_video'):
+                        manager.signal_next_video(app_id)
+                        logging.info(f"Next video signal sent to multi-app manager for app {app_id}")
+                        break
+            except Exception as e:
+                logging.warning(f"Error signaling next video for app {app_id}: {e}")
+                continue
     
     def _action_previous_video(self):
         """Move to previous video"""

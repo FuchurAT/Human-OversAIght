@@ -7,6 +7,7 @@ import logging
 import time
 import signal
 import sys
+import threading
 from pathlib import Path
 from typing import Dict, Optional
 from config.config import APPLICATIONS, SCREEN_CONFIG
@@ -27,6 +28,7 @@ class MultiAppManager:
         self.button_handler: Optional[ButtonHandler] = None
         self.is_running = False
         self.shutdown_event = False
+        self._state_lock = threading.Lock()  # Thread safety for app states
         
         # Signal handling
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -117,6 +119,9 @@ class MultiAppManager:
             # Set button handler
             app.set_button_handler(self.button_handler)
             
+            # Set multi-app manager reference for button actions
+            app._multi_app_manager = self
+            
             # Add to button handler
             self.button_handler.add_app_instance(app_id, app)
             
@@ -131,7 +136,10 @@ class MultiAppManager:
                 'first_frame': True,
                 'fullscreen_size': None,
                 'window_name': f'Object Detection - {app_id}',
-                'is_active': True
+                            'is_active': True,
+            'next_video_requested': False,
+            'next_video_request_count': 0,
+            'last_next_video_time': 0
             }
             
             logging.info(f"Application {app_id} initialized: {len(video_files)} video files found")
@@ -284,6 +292,39 @@ class MultiAppManager:
                 self._next_video_or_finish(app_id)
                 return True
             
+            # Check for button next video signal
+            if state.get('next_video_requested', False):
+                logging.info(f"App {app_id}: Button next video signal received")
+                state['next_video_requested'] = False  # Reset the flag
+                
+                # Safety check: prevent too many rapid requests
+                if state.get('next_video_request_count', 0) > 10:
+                    logging.warning(f"App {app_id}: Too many rapid next video requests, ignoring")
+                    state['next_video_request_count'] = 0
+                    return True
+                
+                # Safety check: prevent hanging requests (timeout after 5 seconds)
+                import time
+                current_time = time.time()
+                if current_time - state.get('last_next_video_time', 0) > 5.0:
+                    logging.warning(f"App {app_id}: Next video request timed out, ignoring")
+                    state['next_video_requested'] = False
+                    state['next_video_request_count'] = 0
+                    return True
+                
+                try:
+                    self._next_video_or_finish(app_id)
+                    logging.info(f"App {app_id}: Successfully moved to next video")
+                except Exception as e:
+                    logging.error(f"App {app_id}: Error moving to next video: {e}")
+                    # Try to recover by reinitializing the video
+                    try:
+                        self._initialize_app_video(app_id, app)
+                    except Exception as e2:
+                        logging.error(f"App {app_id}: Failed to recover video: {e2}")
+                        state['is_active'] = False
+                return True
+            
             # Process frame
             detections, inf_time = app._process_frame(frame)
             
@@ -350,6 +391,7 @@ class MultiAppManager:
             state['frame_count'] = 0
             state['first_frame'] = True
             state['fullscreen_size'] = None
+            state['next_video_requested'] = False  # Reset the flag
             
             if state['current_video_index'] < len(state['video_files']):
                 # Initialize next video
@@ -362,6 +404,28 @@ class MultiAppManager:
         except Exception as e:
             logging.error(f"Error moving to next video for app {app_id}: {e}")
             state['is_active'] = False
+    
+    def signal_next_video(self, app_id: str) -> bool:
+        """Signal that a specific application should move to the next video"""
+        if app_id not in self.app_states:
+            logging.warning(f"Cannot signal next video: app {app_id} not found")
+            return False
+        
+        try:
+            logging.info(f"Signaling next video for app {app_id}")
+            # Use thread-safe approach with lock
+            with self._state_lock:
+                if app_id in self.app_states:
+                    import time
+                    current_time = time.time()
+                    self.app_states[app_id]['next_video_requested'] = True
+                    self.app_states[app_id]['next_video_request_count'] += 1
+                    self.app_states[app_id]['last_next_video_time'] = current_time
+                    logging.debug(f"Next video flag set for app {app_id} (count: {self.app_states[app_id]['next_video_request_count']})")
+            return True
+        except Exception as e:
+            logging.error(f"Error signaling next video for app {app_id}: {e}")
+            return False
     
     def stop_all_apps(self) -> None:
         """Stop all running applications"""

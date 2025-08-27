@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Human OversAIght Autostart
+Comment=Object Detection Inference System - Autostart on Screen 2
+Exec=/bin/bash -c "cd /home/theopsroom/Human-OversAIght/object-detection && DISPLAY=:0.1 ./run_inference.sh"
+Terminal=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=45
+Hidden=false
+NoDisplay=false
+Categories=Science;Education;Development;
+Icon=applications-science
+StartupNotify=false
+X-GNOME-Autostart-Phase=Applications 

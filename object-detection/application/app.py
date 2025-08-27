@@ -86,6 +86,9 @@ class VideoInferenceApp:
         # Initialize button handler (will be set up by multi-app manager)
         self.button_handler = None
         
+        # Button action flags
+        self._button_next_video_signal = False
+        
         # Screen configuration
         self.screen_config = self._get_screen_config()
         
@@ -142,6 +145,11 @@ class VideoInferenceApp:
             self.button_handler = ButtonHandler(self)
             self.button_handler.start_serial_monitoring()
             logging.info(f"Button handler initialized for app {self.app_id} (backward compatibility mode)")
+    
+    def signal_next_video(self) -> None:
+        """Signal that the application should move to the next video"""
+        self._button_next_video_signal = True
+        logging.info(f"Next video signal set for app {self.app_id}")
     
     def _initialize_model(self) -> None:
         """Initialize the YOLO model with proper error handling"""
@@ -775,6 +783,12 @@ class VideoInferenceApp:
                             return
                         
                         should_exit, should_next_video = self._handle_key_input(key, cap, out_writer)
+                        
+                        # Check button signals
+                        if self._button_next_video_signal:
+                            should_next_video = True
+                            self._button_next_video_signal = False  # Reset the flag
+                            logging.info(f"Button next video signal processed for app {self.app_id}")
                         
                         if should_exit:
                             self._cleanup_resources()
