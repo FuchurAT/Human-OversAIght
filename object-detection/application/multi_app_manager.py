@@ -68,11 +68,11 @@ class MultiAppManager:
             # Start button handler
             if not self.button_handler.start_serial_monitoring():
                 logging.error("Failed to start button handler")
-                return False
-            
-            logging.info(f"Initialized {len(self.apps)} applications successfully")
+            else: 
+                logging.info(f"Initialized {len(self.apps)} applications successfully")
+                
             return True
-            
+        
         except Exception as e:
             logging.error(f"Error initializing applications: {e}")
             import traceback
