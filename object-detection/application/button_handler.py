@@ -9,7 +9,7 @@ import time
 import logging
 import serial
 from typing import Optional
-from config.config import BUTTON_MAPPING, BUTTON_CONFIG, BUTTON_ACTIONS, APPLICATIONS, LED_CONFIG, LED_BUTTON_MAPPING
+from config.config import BUTTON_MAPPING, BUTTON_CONFIG, BUTTON_ACTIONS, APPLICATIONS, LED_CONFIG, LED_BUTTON_MAPPING, COUNTER_CONFIG
 from .led_controller import LEDController
 
 
@@ -118,6 +118,7 @@ class ButtonHandler:
             'confirm_action': self._action_confirm_action,
             'undo_action': self._action_undo_action,
             'clear_detections': self._action_clear_detections,
+            'reset_counter': self._action_reset_counter,
             'insert_marker': self._action_insert_marker,
             'go_to_start': self._action_go_to_start,
             'go_to_end': self._action_go_to_end,
@@ -318,6 +319,14 @@ class ButtonHandler:
             if not target_apps:
                 logging.warning(f"No target applications found for button {button_id}")
                 return
+            
+            # Increment button press counter ONCE per button press if counter is enabled
+            if COUNTER_CONFIG.get('enabled', True):
+                # Find the first app instance with a count handler to increment the global counter
+                for app_instance in target_apps:
+                    if hasattr(app_instance, 'count_handler') and app_instance.count_handler:
+                        app_instance.count_handler.increment_button_press()
+                        break  # Only increment once per button press
             
             # Execute action for all target applications
             for app_instance in target_apps:
@@ -965,3 +974,20 @@ class ButtonHandler:
             logging.info(f"  ... and {len(BUTTON_MAPPING) - 5} more")
         
         logging.info("=== End Debug Info ===")
+    
+    def _action_reset_counter(self):
+        """Reset the counter for all application instances"""
+        try:
+            reset_count = 0
+            for app_instance in self.app_instances.values():
+                if hasattr(app_instance, 'count_handler') and app_instance.count_handler:
+                    app_instance.count_handler.reset_counts()
+                    reset_count += 1
+            
+            if reset_count > 0:
+                logging.info(f"Reset counter for {reset_count} application instance(s)")
+            else:
+                logging.warning("No application instances with counter managers found")
+                
+        except Exception as e:
+            logging.error(f"Error resetting counter: {e}")

@@ -21,7 +21,7 @@ from config.config import (
     DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO, DEFAULT_VIDEO_CENTER_ON_SCREEN, DEFAULT_VIDEO_SCALE_MULTIPLIER,
     SCREEN_CONFIG, DEFAULT_NDI_ENABLED, DEFAULT_NDI_SOURCE_NAME, DEFAULT_NDI_GROUP_NAME,
     DEFAULT_NDI_VIDEO_FORMAT, DEFAULT_NDI_FRAME_RATE, 
-    DEFAULT_NDI_VIDEO_WIDTH, DEFAULT_NDI_VIDEO_HEIGHT
+    DEFAULT_NDI_VIDEO_WIDTH, DEFAULT_NDI_VIDEO_HEIGHT, COUNTER_CONFIG
 )
 
 from application.models import Detection, DisplayConfig
@@ -32,6 +32,7 @@ from application.visualizer import DetectionVisualizer
 from application.color_manager import ColorManager
 from application.button_handler import ButtonHandler
 from application.ndi_sender import create_ndi_sender
+from application.count_handler import CountHandler
 
 try:
     from screeninfo import get_monitors
@@ -110,6 +111,9 @@ class VideoInferenceApp:
         
         # Initialize button handler (will be set up by multi-app manager)
         self.button_handler = None
+        
+        # Initialize count handler with global count file
+        self.count_handler = CountHandler("count.txt")
         
         # Button action flags
         self._button_next_video_signal = False
@@ -412,6 +416,12 @@ class VideoInferenceApp:
         if self.display_config.enable_glitches:
             self.visualizer.draw_random_glitches(frame_with_overlays)
         
+        # Draw counter on frame if enabled
+        if (COUNTER_CONFIG.get('enabled', True) and 
+            hasattr(self, 'count_handler') and self.count_handler):
+            position = COUNTER_CONFIG.get('position', 'top_right')
+            frame_with_overlays = self.count_handler.draw_counter_on_frame(frame_with_overlays, position)
+        
         # Final debug logging before return
         logging.debug(f"Final frame shape: {frame_with_overlays.shape}, dtype: {frame_with_overlays.dtype}")
         logging.debug(f"Frame is None: {frame_with_overlays is None}, Frame size: {frame_with_overlays.size if frame_with_overlays is not None else 'N/A'}")
@@ -604,6 +614,17 @@ class VideoInferenceApp:
     
     def _handle_key_input(self, key: int, cap, out_writer) -> Tuple[bool, bool]:
         """Handle keyboard input and return (should_exit, should_next_video)"""
+        # Only increment key press counter for actual user key presses (not programmatic actions)
+        # Check if this is a real user key press by looking for specific key codes
+        if (key != 0 and COUNTER_CONFIG.get('enabled', True) and 
+            hasattr(self, 'count_handler') and self.count_handler):
+            # Only count actual user input keys, not programmatic or system keys
+            # Also check if this is a valid ASCII key (to avoid counting system/control keys)
+            if (key in [ord('q'), ord('n'), ord('b'), ord('l'), ord('f'), ord('d'), 27] and  # ESC
+                key < 256):  # Only count valid ASCII keys
+                self.count_handler.increment_key_press()
+                logging.debug(f"User key press detected: {chr(key) if key < 128 else key}")
+        
         if key == ord('q') or key == 27:  # 'q' or ESC
             return True, False
         elif key == ord('n'):  # Next video

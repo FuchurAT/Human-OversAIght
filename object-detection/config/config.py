@@ -6,6 +6,7 @@ Contains all constants, default values, and configuration settings.
 # Application Constants
 ENABLE_UNMASK = True
 ENABLE_GRAD_CAM_VIEW = True
+ENABLE_COUNTER_DISPLAY = True
 
 # Multi-Application Configuration
 # Each application can have its own configuration including screen, video folder, and model
@@ -13,8 +14,8 @@ APPLICATIONS = {
     'app_01': {
         'name': 'Application 01',
         'screen_id': 1,  # Primary monitor (0), secondary (1), etc.
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/horizontal',
-        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'video_folder': 'E:/Projects/human-oversaight/data/videos/horizontal',
+        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
         'enabled': True,
         'ndi': {
@@ -29,9 +30,9 @@ APPLICATIONS = {
     },
     'app_02': {
         'name': 'Application 02', 
-        'screen_id': 2,  # Secondary monitor
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/vertical',
-        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'screen_id': 1,  # Secondary monitor
+        'video_folder': 'E:/Projects/human-oversaight/data/videos/vertical',
+        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
         'enabled': True,
         'ndi': {
@@ -46,11 +47,11 @@ APPLICATIONS = {
     },
     'app_03': {
         'name': 'Application 03',
-        'screen_id': 3,
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
-        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'screen_id': 0,  # Same screen as app_01 but different position
+        'video_folder': 'E:/Projects/human-oversaight/data/videos',
+        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
-        'enabled': True,
+        'enabled': False,  # Disabled by default
         'ndi': {
             'enabled': False,
             'source_name': 'Human-OversAIght-App03',
@@ -413,10 +414,25 @@ BUTTON_ACTIONS = {
     'confirm_action': {'type': 'immediate', 'requires_confirmation': False},
     'undo_action': {'type': 'immediate', 'requires_confirmation': False},
     'clear_detections': {'type': 'immediate', 'requires_confirmation': True},
+    'reset_counter': {'type': 'immediate', 'requires_confirmation': True},
     'insert_marker': {'type': 'immediate', 'requires_confirmation': False},
     'go_to_start': {'type': 'immediate', 'requires_confirmation': False},
     'go_to_end': {'type': 'immediate', 'requires_confirmation': False},
     'emergency_stop': {'type': 'immediate', 'requires_confirmation': False}
+}
+
+# Counter Display Configuration
+COUNTER_CONFIG = {
+    'enabled': False,
+    'position': 'top_right',  # 'top_left', 'top_right', 'bottom_left', 'bottom_right'
+    'font_scale': 1.0,
+    'font_thickness': 2,
+    'text_color': (255, 255, 255),  # White
+    'background_color': (0, 0, 0),  # Black
+    'background_alpha': 0.7,
+    'x_offset': 20,
+    'y_offset': 50,
+    'line_height': 30
 }
 
 # Logging Configuration
