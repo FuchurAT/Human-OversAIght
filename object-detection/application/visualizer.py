@@ -619,9 +619,19 @@ class DetectionVisualizer:
     
     def _draw_enemy_indicators(self, frame: np.ndarray, box: Tuple[int, int, int], 
                               color: Tuple[int, int, int]) -> None:
-        """Draw enemy indicators (TARGET text and cross)"""
+        """Draw enemy indicators (coordinates text and cross)"""
         font = cv2.FONT_HERSHEY_DUPLEX
-        cv2.putText(frame, "TARGET", (box[0], box[1] - 10), font, 0.8, color, 2)
+        
+        # Extract coordinates from the box
+        x1, y1, x2, y2 = box
+        
+        # Format coordinates text - show top-left and bottom-right coordinates
+        coords_text = f"({x1},{y1}) ({x2},{y2})"
+        
+        # Draw coordinates text above the bounding box
+        cv2.putText(frame, coords_text, (box[0], box[1] - 10), font, 0.6, color, 2)
+
+        # cv2.putText(frame, "TARGET", (box[0], box[1] - 10), font, 0.8, color, 2)
         
         # Draw target cross
         cx = (box[0] + box[2]) // 2
