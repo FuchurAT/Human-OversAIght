@@ -235,7 +235,10 @@ class GradCAMProcessor:
                         selected_classes.append(class_id)
             
             # Overlay Grad-CAM for each selected box
-            if in_box_only:
+            if len(selected_boxes) == 0:
+                # No detections found, return original frame
+                gradcam_img = frame.copy()
+            elif in_box_only:
                 gradcam_img = frame.copy()
                 for box, conf, class_id in zip(selected_boxes, selected_confs, selected_classes):
                     single_gradcam = self.get_gradcam_image(frame)

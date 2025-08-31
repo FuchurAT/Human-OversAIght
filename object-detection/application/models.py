@@ -22,7 +22,7 @@ class DisplayConfig:
     show_fps_info: bool = False
     gradcam_enabled: bool = False
     enable_glitches: bool = False
-    gradcam_in_box_only: bool = True
+    gradcam_in_box_only: bool = False
     blur_boxes: bool = True
     color_state: str = 'blue'
     show_enemy: bool = False

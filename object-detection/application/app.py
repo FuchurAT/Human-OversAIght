@@ -259,20 +259,42 @@ class VideoInferenceApp:
             logging.error(f"Inference traceback: {traceback.format_exc()}")
             return [], 0.0
     
+    def _validate_frame(self, frame: np.ndarray, name: str = "frame") -> bool:
+        """Validate that a frame is valid and usable"""
+        if frame is None:
+            logging.error(f"{name} is None")
+            return False
+        if not hasattr(frame, 'shape'):
+            logging.error(f"{name} has no shape attribute")
+            return False
+        if len(frame.shape) != 3:
+            logging.error(f"{name} has invalid shape: {frame.shape}")
+            return False
+        if frame.shape[2] != 3:
+            logging.error(f"{name} has invalid channels: {frame.shape[2]}")
+            return False
+        if frame.size == 0:
+            logging.error(f"{name} has size 0")
+            return False
+        return True
+    
     def _prepare_display_frame(self, frame: np.ndarray, detections: List[Detection], 
-                              gradcam_img: np.ndarray) -> np.ndarray:
+                               gradcam_img: np.ndarray) -> np.ndarray:
         """Prepare the frame for display with all overlays"""
         # Check if frame is valid
-        if frame is None:
-            logging.warning("Received None frame in _prepare_display_frame")
+        if not self._validate_frame(frame, "input frame"):
+            logging.warning("Received invalid frame in _prepare_display_frame")
             # Return a black frame as fallback
             return np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # Debug: Log detection count
+        # Debug: Log detection count and frame info
         logging.debug(f"Preparing display frame with {len(detections)} detections")
+        logging.debug(f"Input frame shape: {frame.shape}, dtype: {frame.dtype}")
+        logging.debug(f"GradCAM image: {'None' if gradcam_img is None else f'shape: {gradcam_img.shape}, dtype: {gradcam_img.dtype}'}")
         
         # Use original frame instead of converting to grayscale to preserve colors for detection boxes
         frame_for_display = frame.copy()
+        logging.debug(f"Frame for display copied - shape: {frame_for_display.shape}, dtype: {frame_for_display.dtype}")
         
         # Filter overlapping detections
         filtered_detections = self.box_manager.filter_overlapping_boxes(detections)
@@ -280,43 +302,71 @@ class VideoInferenceApp:
         
         # Draw detection overlays
         frame_with_overlays = frame_for_display.copy()
+        logging.debug(f"Frame with overlays copied - shape: {frame_with_overlays.shape}, dtype: {frame_with_overlays.dtype}")
+        
         try:
             # Debug: Check if we have detections and if visualizer exists
-            #logging.info(f"Drawing detection overlays: {len(filtered_detections)} detections, visualizer: {self.visualizer is not None}")
+            logging.debug(f"Drawing detection overlays: {len(filtered_detections)} detections, visualizer: {self.visualizer is not None}")
          
             self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
-            #logging.info(f"Successfully drew detection overlays for {len(filtered_detections)} detections")
+            logging.debug(f"Successfully drew detection overlays for {len(filtered_detections)} detections")
+            logging.debug(f"Frame after detection overlays - shape: {frame_with_overlays.shape}, dtype: {frame_with_overlays.dtype}")
             
+            # Verify frame is still valid after drawing overlays
+            if frame_with_overlays is None or frame_with_overlays.size == 0:
+                logging.error("Frame became invalid after drawing detection overlays!")
+                frame_with_overlays = frame_for_display.copy()
+                if filtered_detections:
+                    self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
                 
         except Exception as e:
             logging.error(f"Error drawing detection overlays: {e}")
             import traceback
             logging.error(f"Overlay drawing traceback: {traceback.format_exc()}")
+            # Fallback: use original frame
+            frame_with_overlays = frame_for_display.copy()
         
         # Apply Grad-CAM if enabled and if it's different from the original frame
         if (self.display_config.gradcam_enabled and gradcam_img is not None and 
             not np.array_equal(gradcam_img, frame)):
-            # Save frame before GradCAM
-            if filtered_detections:
-                logging.info(f"Saved frame before GradCAM")
-            
             frame_with_overlays = self._apply_gradcam_overlay(frame_with_overlays, filtered_detections, gradcam_img)
             
-            # Save frame after GradCAM
-            if filtered_detections:
-                logging.info(f"Saved frame after GradCAM")
+            # When gradcam_in_box_only is False, redraw detection overlays on top of GradCAM
+            # to ensure they remain visible
+            if not self.display_config.gradcam_in_box_only and filtered_detections:
+                logging.debug("Redrawing detection overlays on top of full GradCAM overlay")
+                self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+        elif self.display_config.gradcam_enabled and gradcam_img is None:
+            # GradCAM is enabled but no image available - this is normal when GradCAM fails
+            # The frame_with_overlays already contains the detection boxes, so no action needed
+            # This ensures that when gradcam_in_box_only = False and no GradCAM is available,
+            # the system displays the normal frame with detection boxes (default behavior)
+            logging.debug("GradCAM enabled but no image available - displaying normal frame with detections")
+            # Ensure we have a valid frame to return
+            if frame_with_overlays is None or frame_with_overlays.size == 0:
+                logging.warning("Frame with overlays is invalid, using original frame")
+                frame_with_overlays = frame_for_display.copy()
+                # Redraw detection overlays on the fresh frame
+                if filtered_detections:
+                    self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+        elif not self.display_config.gradcam_enabled:
+            # GradCAM is disabled - frame_with_overlays already contains detection boxes
+            logging.debug("GradCAM disabled - displaying normal frame with detections")
         
         # Draw glitches if enabled
         if self.display_config.enable_glitches:
-            # Save frame before glitches
-            if filtered_detections:
-                logging.info(f"Saved frame before glitches")
-            
             self.visualizer.draw_random_glitches(frame_with_overlays)
-            
-            # Save frame after glitches
+        
+        # Final debug logging before return
+        logging.debug(f"Final frame shape: {frame_with_overlays.shape}, dtype: {frame_with_overlays.dtype}")
+        logging.debug(f"Frame is None: {frame_with_overlays is None}, Frame size: {frame_with_overlays.size if frame_with_overlays is not None else 'N/A'}")
+        
+        # Final safety check - ensure we return a valid frame
+        if frame_with_overlays is None or frame_with_overlays.size == 0:
+            logging.error("Final frame is invalid, returning original frame as fallback")
+            frame_with_overlays = frame_for_display.copy()
             if filtered_detections:
-                logging.info(f"Saved frame after glitches")
+                self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
         
         return frame_with_overlays
     
@@ -721,7 +771,8 @@ class VideoInferenceApp:
                                         logging.info("GradCAM processor reloaded successfully")
                                     else:
                                         logging.warning("Failed to reload GradCAM processor")
-                                        gradcam_img = frame.copy()
+                                        # Don't set gradcam_img here - let it remain None to show normal frame
+                                        gradcam_img = None
                                 
                                 # Frame skip threshold adjustment removed to fix synchronization issues
                                 # GradCAM now processes every frame for better sync
@@ -729,19 +780,30 @@ class VideoInferenceApp:
                                 gradcam_img = self.gradcam_processor.process_gradcam(
                                     frame, detections, self.display_config.gradcam_in_box_only
                                 )
+                                
+                                # Check if GradCAM actually produced a meaningful result
+                                if gradcam_img is not None and np.array_equal(gradcam_img, frame):
+                                    # GradCAM returned the original frame (no meaningful result)
+                                    if not self.display_config.gradcam_in_box_only:
+                                        # For full-frame mode, if no meaningful GradCAM, show normal frame
+                                        logging.debug("GradCAM returned original frame - showing normal frame with detections")
+                                        gradcam_img = None
+                                
                             except Exception as e:
-                                logging.warning(f"GradCAM processing failed: {e}, using original frame")
-                                gradcam_img = frame.copy()
+                                logging.warning(f"GradCAM processing failed: {e}, showing normal frame")
+                                gradcam_img = None  # Don't apply overlay, show normal frame
                         elif frame is not None:
-                            logging.debug("GradCAM processor not available, using original frame")
-                            gradcam_img = frame.copy()
+                            logging.debug("GradCAM processor not available, showing normal frame")
+                            gradcam_img = None  # Don't apply overlay, show normal frame
                         else:
                             logging.warning("Frame is None, creating blank image")
                             gradcam_img = np.zeros((480, 640, 3), dtype=np.uint8)
                         
                         # Prepare display frame (with additional safety check)
                         if frame is not None:
+                            logging.debug(f"Preparing display frame - frame shape: {frame.shape}, detections: {len(detections)}")
                             display_img = self._prepare_display_frame(frame, detections, gradcam_img)
+                            logging.debug(f"Display frame prepared - shape: {display_img.shape}, dtype: {display_img.dtype}")
                         else:
                             logging.warning("Frame is None, creating blank display image")
                             display_img = np.zeros((480, 640, 3), dtype=np.uint8)
