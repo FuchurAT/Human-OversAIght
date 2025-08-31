@@ -16,7 +16,16 @@ APPLICATIONS = {
         'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/horizontal',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
-        'enabled': True
+        'enabled': True,
+        'ndi': {
+            'enabled': True,
+            'source_name': 'Human-OversAIght-App01',
+            'group_name': 'Detection-Apps',
+            'video_format': 'BGRX',
+            'frame_rate': 30,
+            'video_width': 1920,
+            'video_height': 1080
+        }
     },
     'app_02': {
         'name': 'Application 02', 
@@ -24,7 +33,16 @@ APPLICATIONS = {
         'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/vertical',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
-        'enabled': True
+        'enabled': True,
+        'ndi': {
+            'enabled': True,
+            'source_name': 'Human-OversAIght-App02',
+            'group_name': 'Detection-Apps',
+            'video_format': 'BGRX',
+            'frame_rate': 30,
+            'video_width': 1920,
+            'video_height': 1080
+        }
     },
     'app_03': {
         'name': 'Application 03',
@@ -32,7 +50,16 @@ APPLICATIONS = {
         'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
-        'enabled': True  
+        'enabled': True,
+        'ndi': {
+            'enabled': False,
+            'source_name': 'Human-OversAIght-App03',
+            'group_name': 'Detection-Apps',
+            'video_format': 'BGRX',
+            'frame_rate': 30,
+            'video_width': 1920,
+            'video_height': 1080
+        }
     }
 }
 
@@ -40,8 +67,8 @@ APPLICATIONS = {
 # Maps screen IDs to display settings
 SCREEN_CONFIG = {
     1: {  # Primary monitor
-        'width': 1920,
-        'height': 1080,
+        'width': 2560,
+        'height': 1440,
         'x_offset': 0,
         'y_offset': 0,
         'scale_mode': 'fit',
@@ -52,17 +79,7 @@ SCREEN_CONFIG = {
     2: {  # Secondary monitor
         'width': 1920,
         'height': 1080,
-        'x_offset': 1920,  # 2688?
-        'y_offset': 0,
-        'scale_mode': 'fit',
-        'scale_multiplier': 1,
-        'maintain_aspect_ratio': True,
-        'center_video': True
-    },
-    3: {  # Secondary monitor
-        'width': 1920,
-        'height': 1080,
-        'x_offset': 3840,  # 3840?
+        'x_offset': 2560,
         'y_offset': 0,
         'scale_mode': 'fit',
         'scale_multiplier': 1,
@@ -99,6 +116,15 @@ DEFAULT_GRADCAM_ALPHA = 1
 
 # Video Settings
 DEFAULT_FPS = 20
+
+# NDI Settings
+DEFAULT_NDI_ENABLED = True
+DEFAULT_NDI_SOURCE_NAME = "Human-OversAIght-Detection"
+DEFAULT_NDI_GROUP_NAME = ""
+DEFAULT_NDI_VIDEO_FORMAT = "BGRX"  # BGRX, UYVY, RGBX, etc.
+DEFAULT_NDI_FRAME_RATE = 30
+DEFAULT_NDI_VIDEO_WIDTH = 1920
+DEFAULT_NDI_VIDEO_HEIGHT = 1080
 
 # Video Display Size Configuration
 # These settings control the size of the video display window
@@ -267,7 +293,7 @@ BUTTON_CONFIG = {
 
 # LED Configuration
 LED_CONFIG = {
-    'enabled': True,                    # Enable LED control
+    'enabled': False,                    # Enable LED control
     'serial_port': '/dev/ttyUSB0',     # Serial port for Arduino Nano (LED control)
     'baud_rate': 115200,               # Baud rate for LED communication
     'update_interval_ms': 20,          # LED update interval (20ms = 50 FPS)

@@ -19,7 +19,9 @@ from config.config import (
     DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, MIN_WINDOW_SIZE, DEFAULT_FPS,
     DEFAULT_VIDEO_WIDTH, DEFAULT_VIDEO_HEIGHT, DEFAULT_VIDEO_SCALE_MODE,
     DEFAULT_VIDEO_MAINTAIN_ASPECT_RATIO, DEFAULT_VIDEO_CENTER_ON_SCREEN, DEFAULT_VIDEO_SCALE_MULTIPLIER,
-    SCREEN_CONFIG
+    SCREEN_CONFIG, DEFAULT_NDI_ENABLED, DEFAULT_NDI_SOURCE_NAME, DEFAULT_NDI_GROUP_NAME,
+    DEFAULT_NDI_VIDEO_FORMAT, DEFAULT_NDI_FRAME_RATE, 
+    DEFAULT_NDI_VIDEO_WIDTH, DEFAULT_NDI_VIDEO_HEIGHT
 )
 
 from application.models import Detection, DisplayConfig
@@ -29,6 +31,7 @@ from application.gradcam_processor import GradCAMProcessor
 from application.visualizer import DetectionVisualizer
 from application.color_manager import ColorManager
 from application.button_handler import ButtonHandler
+from application.ndi_sender import create_ndi_sender
 
 try:
     from screeninfo import get_monitors
@@ -83,6 +86,28 @@ class VideoInferenceApp:
         # Initialize visualizer
         self.visualizer = DetectionVisualizer(self.display_config, list(CLASSES.keys()))
         
+        # Get app-specific NDI configuration
+        ndi_config = self._get_ndi_config()
+        
+        # Initialize NDI sender with app-specific configuration
+        self.ndi_sender = create_ndi_sender(
+            source_name=ndi_config['source_name'],
+            group_name=ndi_config['group_name'],
+            video_format=ndi_config['video_format'],
+            frame_rate=ndi_config['frame_rate'],
+            video_width=ndi_config['video_width'],
+            video_height=ndi_config['video_height']
+        )
+        
+        # Update display config with NDI settings
+        self.display_config.ndi_enabled = ndi_config['enabled']
+        self.display_config.ndi_source_name = ndi_config['source_name']
+        self.display_config.ndi_group_name = ndi_config['group_name']
+        self.display_config.ndi_video_format = ndi_config['video_format']
+        self.display_config.ndi_frame_rate = ndi_config['frame_rate']
+        self.display_config.ndi_video_width = ndi_config['video_width']
+        self.display_config.ndi_video_height = ndi_config['video_height']
+        
         # Initialize button handler (will be set up by multi-app manager)
         self.button_handler = None
         
@@ -107,6 +132,13 @@ class VideoInferenceApp:
         logging.info(f"  Box threshold: {self.box_threshold}")
         logging.info(f"  GradCAM enabled: {self.gradcam_processor.is_model_loaded() if self.gradcam_processor is not None else False}")
         logging.info(f"  Screen config: {self.screen_config}")
+        logging.info(f"  NDI enabled: {self.display_config.ndi_enabled}")
+        if self.display_config.ndi_enabled:
+            logging.info(f"  NDI source: {self.display_config.ndi_source_name}")
+            logging.info(f"  NDI group: {self.display_config.ndi_group_name}")
+            logging.info(f"  NDI format: {self.display_config.ndi_video_format}")
+            logging.info(f"  NDI resolution: {self.display_config.ndi_video_width}x{self.display_config.ndi_video_height}")
+            logging.info(f"  NDI frame rate: {self.display_config.ndi_frame_rate}")
     
     def _get_screen_config(self) -> dict:
         """Get screen configuration for this application"""
@@ -131,6 +163,29 @@ class VideoInferenceApp:
                 'center_video': DEFAULT_VIDEO_CENTER_ON_SCREEN
             }
             logging.info(f"Using fallback config: {fallback_config}")
+            return fallback_config
+    
+    def _get_ndi_config(self) -> dict:
+        """Get NDI configuration for this application"""
+        from config.config import APPLICATIONS
+        
+        if self.app_id in APPLICATIONS and 'ndi' in APPLICATIONS[self.app_id]:
+            ndi_config = APPLICATIONS[self.app_id]['ndi'].copy()
+            logging.info(f"Found NDI config for app {self.app_id}: {ndi_config}")
+            return ndi_config
+        else:
+            # Fallback to default NDI config
+            logging.warning(f"NDI config not found for app {self.app_id}, using defaults")
+            fallback_config = {
+                'enabled': DEFAULT_NDI_ENABLED,
+                'source_name': f"{DEFAULT_NDI_SOURCE_NAME}-{self.app_id}",
+                'group_name': DEFAULT_NDI_GROUP_NAME,
+                'video_format': DEFAULT_NDI_VIDEO_FORMAT,
+                'frame_rate': DEFAULT_NDI_FRAME_RATE,
+                'video_width': DEFAULT_NDI_VIDEO_WIDTH,
+                'video_height': DEFAULT_NDI_VIDEO_HEIGHT
+            }
+            logging.info(f"Using fallback NDI config: {fallback_config}")
             return fallback_config
     
     def set_button_handler(self, button_handler: ButtonHandler) -> None:
@@ -179,7 +234,7 @@ class VideoInferenceApp:
         try:
             logging.info("Testing model with dummy frame...")
             dummy_frame = np.zeros((640, 640, 3), dtype=np.uint8)
-            test_result = self.model(dummy_frame, verbose=False)
+            test_result = self.model(dummy_frame, conf=0.15, verbose=False)
             logging.info(f"Model test successful, result type: {type(test_result)}")
             if hasattr(test_result, 'boxes'):
                 logging.info(f"Model has boxes attribute: {test_result.boxes is not None}")
@@ -562,6 +617,22 @@ class VideoInferenceApp:
         elif key == ord('f'):  # Toggle FPS info
             self.display_config.show_fps_info = not self.display_config.show_fps_info
             logging.info(f"Show FPS info: {self.display_config.show_fps_info}")
+        elif key == ord('d'):  # Toggle NDI output
+            self.display_config.ndi_enabled = not self.display_config.ndi_enabled
+            if self.display_config.ndi_enabled:
+                logging.info(f"NDI output enabled for app {self.app_id}")
+                # Update NDI sender configuration
+                ndi_config = self._get_ndi_config()
+                self.ndi_sender.update_config(
+                    source_name=ndi_config['source_name'],
+                    group_name=ndi_config['group_name'],
+                    video_format=ndi_config['video_format'],
+                    frame_rate=ndi_config['frame_rate'],
+                    video_width=ndi_config['video_width'],
+                    video_height=ndi_config['video_height']
+                )
+            else:
+                logging.info(f"NDI output disabled for app {self.app_id}")
         else:
             self.visualizer.handle_key_press(key, self)
         
@@ -593,6 +664,20 @@ class VideoInferenceApp:
             if hasattr(self, 'visualizer'):
                 self.visualizer.cleanup_audio()
             
+            # Clean up NDI sender for new video
+            if hasattr(self, 'ndi_sender'):
+                self.ndi_sender.cleanup()
+                # Reinitialize NDI sender for new video
+                ndi_config = self._get_ndi_config()
+                self.ndi_sender = create_ndi_sender(
+                    source_name=ndi_config['source_name'],
+                    group_name=ndi_config['group_name'],
+                    video_format=ndi_config['video_format'],
+                    frame_rate=ndi_config['frame_rate'],
+                    video_width=ndi_config['video_width'],
+                    video_height=ndi_config['video_height']
+                )
+            
             logging.debug("Video resources cleaned up for next video")
             
         except Exception as e:
@@ -613,6 +698,10 @@ class VideoInferenceApp:
             # Clean up visualizer audio resources
             if hasattr(self, 'visualizer'):
                 self.visualizer.cleanup_audio()
+            
+            # Clean up NDI sender
+            if hasattr(self, 'ndi_sender'):
+                self.ndi_sender.cleanup()
             
             # Clean up button handler
             if hasattr(self, 'button_handler'):
@@ -686,6 +775,8 @@ class VideoInferenceApp:
                     logging.info(f"Saving output video to: {self.output_path}")
 
                 logging.info("Press SPACE to toggle border color and show 'ENEMY'. Press 'q' or ESC to quit.")
+                logging.info("Press 'd' to toggle NDI output. Press 'b' to toggle GradCAM box mode.")
+                logging.info("Press 'l' to toggle legend. Press 'f' to toggle FPS info.")
 
                 # Setup fullscreen window
                 window_name = 'Object detection Main'
@@ -819,6 +910,13 @@ class VideoInferenceApp:
                         except Exception as e:
                             logging.warning(f"Error displaying frame: {e}")
                             # Continue with next frame
+                        
+                        # Send frame via NDI if enabled
+                        if self.display_config.ndi_enabled and self.ndi_sender.is_available():
+                            try:
+                                self.ndi_sender.send_frame(display_img)
+                            except Exception as e:
+                                logging.warning(f"Error sending frame via NDI: {e}")
                         
                         # Debug: Print frame info
                         if frame_count % 30 == 0:  # Every 30 frames
@@ -1074,4 +1172,64 @@ class VideoInferenceApp:
     
     def get_box_threshold(self) -> float:
         """Get the current detection confidence threshold"""
-        return self.box_threshold 
+        return self.box_threshold
+    
+    def get_ndi_status(self) -> dict:
+        """Get current NDI status and configuration"""
+        return {
+            'enabled': self.display_config.ndi_enabled,
+            'available': self.ndi_sender.is_available() if hasattr(self, 'ndi_sender') else False,
+            'source_name': self.display_config.ndi_source_name,
+            'group_name': self.display_config.ndi_group_name,
+            'video_format': self.display_config.ndi_video_format,
+            'frame_rate': self.display_config.ndi_frame_rate,
+            'video_width': self.display_config.ndi_video_width,
+            'video_height': self.display_config.ndi_video_height,
+            'sending': self.ndi_sender.is_sending if hasattr(self, 'ndi_sender') else False
+        }
+    
+    def set_ndi_config(self, enabled: bool = None, source_name: str = None, 
+                       group_name: str = None, video_format: str = None,
+                       frame_rate: int = None, video_width: int = None, 
+                       video_height: int = None) -> None:
+        """Update NDI configuration"""
+        if enabled is not None:
+            self.display_config.ndi_enabled = enabled
+        
+        if source_name is not None:
+            self.display_config.ndi_source_name = source_name
+        if group_name is not None:
+            self.display_config.ndi_group_name = group_name
+        if video_format is not None:
+            self.display_config.ndi_video_format = video_format
+        if frame_rate is not None:
+            self.display_config.ndi_frame_rate = frame_rate
+        if video_width is not None:
+            self.display_config.ndi_video_width = video_width
+        if video_height is not None:
+            self.display_config.ndi_video_height = video_height
+        
+        # Update NDI sender configuration
+        if hasattr(self, 'ndi_sender'):
+            self.ndi_sender.update_config(
+                source_name=self.display_config.ndi_source_name,
+                group_name=self.display_config.ndi_group_name,
+                video_format=self.display_config.ndi_video_format,
+                frame_rate=self.display_config.ndi_frame_rate,
+                video_width=self.display_config.ndi_video_width,
+                video_height=self.display_config.ndi_video_height
+            )
+        
+        logging.info(f"NDI configuration updated for app {self.app_id}: enabled={self.display_config.ndi_enabled}, "
+                    f"source={self.display_config.ndi_source_name}, "
+                    f"format={self.display_config.ndi_video_format}, "
+                    f"resolution={self.display_config.ndi_video_width}x{self.display_config.ndi_video_height}")
+    
+    def toggle_ndi(self) -> bool:
+        """Toggle NDI output on/off"""
+        self.display_config.ndi_enabled = not self.display_config.ndi_enabled
+        if self.display_config.ndi_enabled:
+            logging.info(f"NDI output enabled for app {self.app_id}")
+        else:
+            logging.info(f"NDI output disabled for app {self.app_id}")
+        return self.display_config.ndi_enabled 

@@ -26,4 +26,12 @@ class DisplayConfig:
     blur_boxes: bool = True
     color_state: str = 'blue'
     show_enemy: bool = False
-    solid_border: bool = False 
+    solid_border: bool = False
+    # NDI Settings
+    ndi_enabled: bool = False
+    ndi_source_name: str = "Human-OversAIght-Detection"
+    ndi_group_name: str = ""
+    ndi_video_format: str = "BGRX"
+    ndi_frame_rate: int = 30
+    ndi_video_width: int = 1920
+    ndi_video_height: int = 1080 
