@@ -9,12 +9,15 @@ ENABLE_GRAD_CAM_VIEW = True
 ENABLE_COUNTER_DISPLAY = True
 
 # Multi-Application Configuration
-# Each application can have its own configuration including screen, video folder, and model
+# Each application can have its own configuration including screen, video folders, and model
 APPLICATIONS = {
     'app_01': {
         'name': 'Application 01',
         'screen_id': 0,  # Primary monitor (0), secondary (1), etc.
-        'video_folder': '/home/theopsroom/Documents/NEW', #/home/theopsroom/Human-OversAIght/data/videos/horizontal
+        'video_folders': [
+            '/home/theopsroom/Documents/NEW',
+            '/home/theopsroom/Human-OversAIght/data/videos/horizontal'
+        ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
         'enabled': True,
@@ -31,7 +34,9 @@ APPLICATIONS = {
     'app_02': {
         'name': 'Application 02', 
         'screen_id': 0,  # Secondary monitor
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/vertical',
+        'video_folders': [
+            '/home/theopsroom/Human-OversAIght/data/videos/vertical'
+        ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
         'enabled': False,
@@ -48,7 +53,9 @@ APPLICATIONS = {
     'app_03': {
         'name': 'Application 03',
         'screen_id': 0,  # Same screen as app_01 but different position
-        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
+        'video_folders': [
+            '/home/theopsroom/Human-OversAIght/data/videos/square'
+        ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
         'enabled': False,  # Disabled by default
@@ -65,7 +72,9 @@ APPLICATIONS = {
     'app_04': {
         'name': 'Application 04',
         'screen_id': 0,  # Same screen as app_01 but different position
-        'video_folder': '/home/theopsroom/Documents/NEW-R',
+        'video_folders': [
+            '/home/theopsroom/Documents/NEW-R',
+        ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
         'enabled': False,  # Disabled by default
@@ -206,7 +215,7 @@ BUTTON_MAPPING = {
     19: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_03'},
     20: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     21: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    22: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    22: {'key': 'f', 'action': 'next_folder', 'description': 'Switch to next folder', 'app_id': 'all'},
     23: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     24: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
     25: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
@@ -376,6 +385,7 @@ LED_BUTTON_MAPPING = {
 BUTTON_ACTIONS = {
     'exit': {'type': 'immediate', 'requires_confirmation': False},
     'next_video': {'type': 'immediate', 'requires_confirmation': False},
+    'next_folder': {'type': 'immediate', 'requires_confirmation': False},
     'previous_video': {'type': 'immediate', 'requires_confirmation': False},
     'restart_video': {'type': 'immediate', 'requires_confirmation': False},
     'pause_resume': {'type': 'toggle', 'requires_confirmation': False},
@@ -445,6 +455,7 @@ FEEDBACK_CONFIG = {
 ACTION_FEEDBACK_COLORS = {
     'exit': (0, 0, 255),               # Red
     'next_video': (0, 255, 0),         # Green
+    'next_folder': (0, 255, 255),      # Yellow (Cyan)
     'previous_video': (0, 255, 255),   # Yellow
     'restart_video': (255, 0, 255),    # Magenta
     'pause_resume': (255, 255, 0),     # Cyan
@@ -483,9 +494,10 @@ ACTION_FEEDBACK_COLORS = {
 KEY_FEEDBACK_COLORS = {
     ord('q'): (0, 0, 255),            # Red for quit
     ord('n'): (0, 255, 0),            # Green for next
+    ord('f'): (0, 255, 255),          # Yellow (Cyan) for next folder
+    ord('t'): (255, 128, 128),        # Light Red for FPS toggle
     ord('b'): (0, 255, 255),          # Yellow for toggle
     ord('l'): (128, 255, 128),        # Light Green for legend
-    ord('f'): (255, 128, 128),        # Light Red for FPS
     ord('d'): (128, 128, 255),        # Light Blue for debug/NDI
     27: (255, 0, 0),                  # Blue for ESC
     32: (0, 255, 128),                # Green-Blue for space
@@ -493,7 +505,7 @@ KEY_FEEDBACK_COLORS = {
 
 # Logging Configuration
 LOGGING_CONFIG = {
-    'level': 'ERROR',
+    'level': 'INFO', #DEBUG
     'format': '%(asctime)s - %(levelname)s - %(message)s',
     'date_format': '%Y-%m-%d %H:%M:%S'
 } 

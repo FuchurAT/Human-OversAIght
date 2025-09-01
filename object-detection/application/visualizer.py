@@ -546,11 +546,11 @@ class DetectionVisualizer:
             if self.display_config.solid_border:
                 x1, y1, x2, y2 = detection.box
                 corner_length = DEFAULT_CORNER_LENGTH
-                thickness = 4
+                thickness = 3
             else:
                 x1, y1, x2, y2 = detection.box
                 corner_length = DEFAULT_CORNER_LENGTH
-                thickness = 3
+                thickness = 2
                 
                 if self.display_config.blur_boxes:
                     self._apply_blur_effect(frame, detection.box)

@@ -76,6 +76,7 @@ class ButtonHandler:
         self.action_callbacks = {
             'exit': self._action_exit,
             'next_video': self._action_next_video,
+            'next_folder': self._action_next_folder,
             'previous_video': self._action_previous_video,
             'restart_video': self._action_restart_video,
             'pause_resume': self._action_pause_resume,
@@ -329,6 +330,7 @@ class ButtonHandler:
                             feedback_position = None  # Let the visualizer calculate position
                             app_instance.visualizer.trigger_button_feedback(action_name, feedback_position)
                         
+                        # Execute the action callback
                         self.action_callbacks[action_name]()
                         
                         # Restore previous app instance
@@ -449,6 +451,34 @@ class ButtonHandler:
                         break
             except Exception as e:
                 logging.warning(f"Error signaling next video for app {app_id}: {e}")
+                continue
+    
+    def _action_next_folder(self):
+        """Move to next folder"""
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance:
+            logging.info("Next folder requested via button")
+            # Signal next folder through app instance
+            if hasattr(app_instance, 'signal_next_folder'):
+                try:
+                    app_instance.signal_next_folder()
+                    logging.info(f"Next folder signal sent to app {getattr(app_instance, 'app_id', 'unknown')}")
+                except Exception as e:
+                    logging.error(f"Error signaling next folder to app instance: {e}")
+            else:
+                logging.warning("App instance does not have signal_next_folder method")
+        
+        # For multi-app mode, signal through the manager if available
+        for app_id, app in self.app_instances.items():
+            try:
+                if hasattr(app, '_multi_app_manager'):
+                    manager = app._multi_app_manager
+                    if hasattr(manager, 'signal_next_folder'):
+                        manager.signal_next_folder(app_id)
+                        logging.info(f"Next folder signal sent to multi-app manager for app {app_id}")
+                        break
+            except Exception as e:
+                logging.warning(f"Error signaling next folder for app {app_id}: {e}")
                 continue
     
     def _action_previous_video(self):

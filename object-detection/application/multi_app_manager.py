@@ -83,33 +83,39 @@ class MultiAppManager:
         """Initialize a single application instance"""
         try:
             # Validate configuration
-            required_fields = ['video_folder', 'model_path', 'screen_id']
+            required_fields = ['video_folders', 'model_path', 'screen_id']
             for field in required_fields:
                 if field not in app_config:
                     logging.error(f"Missing required field '{field}' for application {app_id}")
                     return False
             
             # Check if paths exist
-            video_path = Path(app_config['video_folder'])
+            video_folders = app_config['video_folders']
+            if not isinstance(video_folders, list) or len(video_folders) == 0:
+                logging.error(f"video_folders must be a non-empty list for application {app_id}")
+                return False
+            
+            # Check if first video folder exists
+            first_video_path = Path(video_folders[0])
             model_path = Path(app_config['model_path'])
             
-            if not video_path.exists():
-                logging.error(f"Video folder not found: {video_path}")
+            if not first_video_path.exists():
+                logging.error(f"First video folder not found: {first_video_path}")
                 return False
             
             if not model_path.exists():
                 logging.error(f"Model not found: {model_path}")
                 return False
             
-            # Check if video folder contains .mp4 files
-            video_files = [f for f in video_path.iterdir() if f.suffix.lower() == '.mp4']
+            # Check if first video folder contains .mp4 files
+            video_files = [f for f in first_video_path.iterdir() if f.suffix.lower() == '.mp4']
             if not video_files:
-                logging.error(f"No .mp4 files found in video folder: {video_path}")
+                logging.error(f"No .mp4 files found in first video folder: {first_video_path}")
                 return False
             
-            # Create application instance
+            # Create application instance with video_folders list
             app = VideoInferenceApp(
-                video_path=str(video_path),
+                video_path=video_folders,  # Pass the list of folders
                 model_path=str(model_path),
                 box_threshold=0.25,  # Default threshold
                 app_id=app_id,
@@ -427,6 +433,29 @@ class MultiAppManager:
             logging.error(f"Error signaling next video for app {app_id}: {e}")
             return False
     
+    def signal_next_folder(self, app_id: str) -> bool:
+        """Signal that a specific application should switch to the next folder"""
+        if app_id not in self.app_states:
+            logging.warning(f"Cannot signal next folder: app {app_id} not found")
+            return False
+        
+        try:
+            logging.info(f"Signaling next folder for app {app_id}")
+            # Use thread-safe approach with lock
+            with self._state_lock:
+                if app_id in self.app_states:
+                    # Signal next folder through the app instance
+                    app = self.apps.get(app_id)
+                    if app and hasattr(app, 'signal_next_folder'):
+                        app.signal_next_folder()
+                        logging.debug(f"Next folder signal sent to app {app_id}")
+                    else:
+                        logging.warning(f"App {app_id} does not support folder switching")
+            return True
+        except Exception as e:
+            logging.error(f"Error signaling next folder for app {app_id}: {e}")
+            return False
+    
     def stop_all_apps(self) -> None:
         """Stop all running applications"""
         logging.info("Stopping all applications...")
@@ -473,15 +502,31 @@ class MultiAppManager:
         for app_id, app in self.apps.items():
             state = self.app_states.get(app_id, {})
             
+            # Get folder information if available
+            folder_info = {}
+            if hasattr(app, 'get_current_folder_info'):
+                folder_info = app.get_current_folder_info()
+            
+            # Get additional folder statistics
+            folder_stats = {}
+            if hasattr(app, 'get_folder_video_counts'):
+                folder_stats = app.get_folder_video_counts()
+            
+            total_videos = 0
+            if hasattr(app, 'get_total_video_count'):
+                total_videos = app.get_total_video_count()
+            
             status[app_id] = {
                 'running': state.get('is_active', False),
                 'current_video': state.get('current_video_index', 0),
-                'total_videos': len(state.get('video_files', [])),
+                'total_videos': total_videos,
                 'frame_count': state.get('frame_count', 0),
                 'app_id': app.app_id,
                 'screen_id': app.screen_id,
                 'video_path': app.video_path,
-                'model_path': app.model_path
+                'model_path': app.model_path,
+                'folder_info': folder_info,
+                'folder_stats': folder_stats
             }
         
         return status

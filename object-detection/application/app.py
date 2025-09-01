@@ -50,7 +50,38 @@ class VideoInferenceApp:
     
     def __init__(self, video_path: str, model_path: str, box_threshold: float = DEFAULT_BOX_THRESHOLD, 
                  app_id: str = None, screen_id: int = None):
-        self.video_path = video_path
+        # Handle both single path (backward compatibility) and multiple paths
+        if isinstance(video_path, list):
+            self.video_folders = video_path
+            self.current_folder_index = 0
+            self.video_path = video_path[0]  # Current active folder
+        else:
+            # Backward compatibility: convert single path to list
+            self.video_folders = [video_path]
+            self.current_folder_index = 0
+            self.video_path = video_path
+        
+        # Ensure video_folders is always a list and contains valid paths
+        if not self.video_folders:
+            raise ValueError("No video folders provided")
+        
+        # Validate that all folders exist
+        for i, folder in enumerate(self.video_folders):
+            if not os.path.exists(folder):
+                logging.warning(f"Video folder {i} does not exist: {folder}")
+        
+        # Set current folder to first valid folder
+        for i, folder in enumerate(self.video_folders):
+            if os.path.exists(folder):
+                self.current_folder_index = i
+                self.video_path = folder
+                break
+        else:
+            raise ValueError("No valid video folders found")
+        
+        logging.info(f"Initialized with {len(self.video_folders)} video folders")
+        logging.info(f"Current folder: {self.current_folder_index + 1}/{len(self.video_folders)} - {self.video_path}")
+        
         self.model_path = model_path
         self.output_path = ""
         self.box_threshold = box_threshold
@@ -117,6 +148,7 @@ class VideoInferenceApp:
         
         # Button action flags
         self._button_next_video_signal = False
+        self._button_next_folder_signal = False
         
         # Screen configuration
         self.screen_config = self._get_screen_config()
@@ -132,7 +164,10 @@ class VideoInferenceApp:
         logging.info(f"  App ID: {self.app_id}")
         logging.info(f"  Screen ID: {self.screen_id}")
         logging.info(f"  Model: {self.model_path}")
-        logging.info(f"  Video path: {self.video_path}")
+        logging.info(f"  Video folders: {len(self.video_folders)} folders available")
+        logging.info(f"  Current folder: {self.video_path}")
+        if len(self.video_folders) > 1:
+            logging.info(f"  All folders: {self.video_folders}")
         logging.info(f"  Box threshold: {self.box_threshold}")
         logging.info(f"  GradCAM enabled: {self.gradcam_processor.is_model_loaded() if self.gradcam_processor is not None else False}")
         logging.info(f"  Screen config: {self.screen_config}")
@@ -204,11 +239,169 @@ class VideoInferenceApp:
             self.button_handler = ButtonHandler(self)
             self.button_handler.start_serial_monitoring()
             logging.info(f"Button handler initialized for app {self.app_id} (backward compatibility mode)")
+            logging.info(f"Button handler app instances: {list(self.button_handler.app_instances.keys())}")
+        else:
+            logging.info(f"Button handler already exists for app {self.app_id}")
+            logging.info(f"Button handler app instances: {list(self.button_handler.app_instances.keys())}")
     
     def signal_next_video(self) -> None:
         """Signal that the application should move to the next video"""
         self._button_next_video_signal = True
         logging.info(f"Next video signal set for app {self.app_id}")
+    
+    def signal_next_folder(self) -> None:
+        """Signal that the application should move to the next folder"""
+        logging.info(f"signal_next_folder called for app {self.app_id}")
+        logging.info(f"Current folder index: {self.current_folder_index}")
+        logging.info(f"Total folders: {len(self.video_folders)}")
+        logging.info(f"Available folders: {self.video_folders}")
+        
+        self._button_next_folder_signal = True
+        logging.info(f"Next folder signal set for app {self.app_id}")
+        
+        # Also try to switch immediately for testing
+        if len(self.video_folders) > 1:
+            logging.info("Attempting immediate folder switch for testing...")
+            self.switch_to_next_folder()
+        else:
+            logging.info("Only one folder available, no switching needed")
+    
+    def switch_to_next_folder(self) -> None:
+        """Switch to the next video folder in the list"""
+        if len(self.video_folders) <= 1:
+            logging.info(f"Only one folder available, no switching needed")
+            return
+        
+        old_folder = self.video_path
+        old_index = self.current_folder_index
+        
+        # Find next valid folder
+        attempts = 0
+        max_attempts = len(self.video_folders)
+        
+        while attempts < max_attempts:
+            # Move to next folder index
+            self.current_folder_index = (self.current_folder_index + 1) % len(self.video_folders)
+            new_folder = self.video_folders[self.current_folder_index]
+            
+            # Check if this folder exists and has videos
+            if os.path.exists(new_folder):
+                video_files = [f for f in os.listdir(new_folder) if f.endswith('.mp4')]
+                
+                if video_files:
+                    self.video_path = new_folder
+                    logging.info(f"Switched to folder {self.current_folder_index + 1}/{len(self.video_folders)}: {self.video_path}")
+                    logging.info(f"Found {len(video_files)} video files in new folder")
+                    
+                    # Trigger visual feedback for folder switch
+                    if hasattr(self, 'visualizer') and self.visualizer:
+                        self.visualizer.trigger_key_feedback(ord('f'))
+                    
+                    # After switching folders, automatically trigger next video to show content from new folder
+                    logging.info(f"Auto-triggering next video after folder switch from {old_folder} to {self.video_path}")
+                    self._button_next_video_signal = True
+                    #self.signal_next_video()
+                    return
+                else:
+                    logging.warning(f"Folder {new_folder} exists but contains no .mp4 files")
+            else:
+                logging.warning(f"Folder {new_folder} does not exist")
+            
+            attempts += 1
+            
+            # If we've tried all folders and none work, revert to original
+            if attempts >= max_attempts:
+                logging.error(f"Could not find any valid folder after {max_attempts} attempts, reverting to original")
+                self.current_folder_index = old_index
+                self.video_path = old_folder
+                return
+    
+    def log_current_state(self) -> None:
+        """Log the current state for debugging purposes"""
+        logging.info(f"=== Current State for App {self.app_id} ===")
+        logging.info(f"Current folder index: {self.current_folder_index}")
+        logging.info(f"Total folders: {len(self.video_folders)}")
+        logging.info(f"Current video path: {self.video_path}")
+        logging.info(f"All video folders: {self.video_folders}")
+        
+        # Check current folder contents
+        try:
+            if os.path.exists(self.video_path):
+                video_files = [f for f in os.listdir(self.video_path) if f.endswith('.mp4')]
+                logging.info(f"Current folder contains {len(video_files)} video files")
+                if video_files:
+                    logging.info(f"Sample video files: {video_files[:3]}")
+            else:
+                logging.warning(f"Current video path does not exist: {self.video_path}")
+        except Exception as e:
+            logging.error(f"Error checking current folder contents: {e}")
+        
+        logging.info(f"Next video signal: {getattr(self, '_button_next_video_signal', False)}")
+        logging.info(f"Next folder signal: {getattr(self, '_button_next_folder_signal', False)}")
+        logging.info("=== End State Log ===")
+    
+    def refresh_video_files(self) -> list:
+        """Refresh the list of video files from the current folder"""
+        try:
+            if os.path.exists(self.video_path):
+                video_files = [f for f in os.listdir(self.video_path) if f.endswith('.mp4')]
+                logging.info(f"Refreshed video files from {self.video_path}: {len(video_files)} files found")
+                return video_files
+            else:
+                logging.warning(f"Current video path does not exist: {self.video_path}")
+                return []
+        except Exception as e:
+            logging.error(f"Error refreshing video files: {e}")
+            return []
+    
+    def get_current_folder_info(self) -> dict:
+        """Get information about the current folder and available folders"""
+        return {
+            'current_index': self.current_folder_index,
+            'total_folders': len(self.video_folders),
+            'current_path': self.video_path,
+            'all_paths': self.video_folders.copy()
+        }
+    
+    def get_total_video_count(self) -> int:
+        """Get the total number of videos across all folders"""
+        total_count = 0
+        for folder in self.video_folders:
+            try:
+                if os.path.exists(folder):
+                    mp4_files = [f for f in os.listdir(folder) if f.endswith('.mp4')]
+                    total_count += len(mp4_files)
+            except Exception as e:
+                logging.warning(f"Error counting videos in folder {folder}: {e}")
+        return total_count
+    
+    def get_folder_video_counts(self) -> dict:
+        """Get video counts for each folder"""
+        folder_counts = {}
+        for i, folder in enumerate(self.video_folders):
+            try:
+                if os.path.exists(folder):
+                    mp4_files = [f for f in os.listdir(folder) if f.endswith('.mp4')]
+                    folder_counts[i] = {
+                        'path': folder,
+                        'count': len(mp4_files),
+                        'is_current': i == self.current_folder_index
+                    }
+                else:
+                    folder_counts[i] = {
+                        'path': folder,
+                        'count': 0,
+                        'is_current': i == self.current_folder_index,
+                        'error': 'Folder not found'
+                    }
+            except Exception as e:
+                folder_counts[i] = {
+                    'path': folder,
+                    'count': 0,
+                    'is_current': i == self.current_folder_index,
+                    'error': str(e)
+                }
+        return folder_counts
     
     def _initialize_model(self) -> None:
         """Initialize the YOLO model with proper error handling"""
@@ -639,7 +832,15 @@ class VideoInferenceApp:
         elif key == ord('l'):  # Toggle legend
             self.display_config.show_legend = not self.display_config.show_legend
             logging.info(f"Show legend: {self.display_config.show_legend}")
-        elif key == ord('f'):  # Toggle FPS info
+        elif key == ord('f'):  # Next folder
+            logging.info("'f' key pressed - switching to next folder")
+            self.log_current_state()  # Log state before switching
+            self.switch_to_next_folder()
+            self.log_current_state()  # Log state after switching
+            logging.info(f"Switched to next folder: {self.video_path}")
+            # After switching folders, trigger next video to show content from new folder
+            should_next_video = True
+        elif key == ord('t'):  # Toggle FPS info (changed from 'f' to 't')
             self.display_config.show_fps_info = not self.display_config.show_fps_info
             logging.info(f"Show FPS info: {self.display_config.show_fps_info}")
         elif key == ord('d'):  # Toggle NDI output
@@ -742,14 +943,27 @@ class VideoInferenceApp:
         # Initialize button handler for backward compatibility (single app mode)
         self._initialize_button_handler()
         
-        # Get all .mp4 files in the folder
-        mp4_files = [file for file in os.listdir(self.video_path) if file.endswith('.mp4')]
+        # Get all .mp4 files in the current folder
+        mp4_files = self.refresh_video_files()
+        
+        if not mp4_files:
+            logging.error(f"No video files found in current folder: {self.video_path}")
+            return
 
         while True:  # Loop forever over the videos
             # Check stop event if provided (for multi-app mode)
             if stop_event and stop_event.is_set():
                 logging.info(f"Stop signal received for app {self.app_id}")
                 break
+            
+            # Check if we need to refresh video files (e.g., after folder switch)
+            if hasattr(self, '_button_next_folder_signal') and self._button_next_folder_signal:
+                logging.info("Folder switch detected, refreshing video file list...")
+                mp4_files = self.refresh_video_files()
+                if not mp4_files:
+                    logging.error(f"No video files found in new folder: {self.video_path}")
+                    return
+                self._button_next_folder_signal = False  # Reset the flag
                 
             for mp4 in mp4_files:
                 # Check stop event before processing each video
@@ -801,7 +1015,10 @@ class VideoInferenceApp:
 
                 logging.info("Press SPACE to toggle border color and show 'ENEMY'. Press 'q' or ESC to quit.")
                 logging.info("Press 'd' to toggle NDI output. Press 'b' to toggle GradCAM box mode.")
-                logging.info("Press 'l' to toggle legend. Press 'f' to toggle FPS info.")
+                logging.info("Press 'l' to toggle legend. Press 't' to toggle FPS info.")
+                if len(self.video_folders) > 1:
+                    logging.info(f"Press 'f' to switch to next folder ({self.current_folder_index + 1}/{len(self.video_folders)}).")
+                    logging.info(f"Current folder: {self.video_path}")
 
                 # Setup fullscreen window
                 window_name = 'Object detection Main'
@@ -974,6 +1191,19 @@ class VideoInferenceApp:
                             should_next_video = True
                             self._button_next_video_signal = False  # Reset the flag
                             logging.info(f"Button next video signal processed for app {self.app_id}")
+                        
+                        if self._button_next_folder_signal:
+                            logging.info("Processing next folder signal...")
+                            self.log_current_state()  # Log state before switching
+                            self.switch_to_next_folder()
+                            self.log_current_state()  # Log state after switching
+                            self._button_next_folder_signal = False  # Reset the flag
+                            logging.info(f"Button next folder signal processed for app {self.app_id}")
+                            
+                            # After switching folders, we need to break out of the current video loop
+                            # and refresh the video file list to start fresh with the new folder
+                            logging.info("Breaking out of current video loop to refresh video files from new folder")
+                            break
                         
                         if should_exit:
                             self._cleanup_resources()
