@@ -367,7 +367,7 @@ class VideoInferenceApp:
             # Debug: Check if we have detections and if visualizer exists
             logging.debug(f"Drawing detection overlays: {len(filtered_detections)} detections, visualizer: {self.visualizer is not None}")
          
-            self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+            frame_with_overlays = self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
             logging.debug(f"Successfully drew detection overlays for {len(filtered_detections)} detections")
             logging.debug(f"Frame after detection overlays - shape: {frame_with_overlays.shape}, dtype: {frame_with_overlays.dtype}")
             
@@ -376,7 +376,7 @@ class VideoInferenceApp:
                 logging.error("Frame became invalid after drawing detection overlays!")
                 frame_with_overlays = frame_for_display.copy()
                 if filtered_detections:
-                    self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+                    frame_with_overlays = self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
                 
         except Exception as e:
             logging.error(f"Error drawing detection overlays: {e}")
@@ -394,7 +394,7 @@ class VideoInferenceApp:
             # to ensure they remain visible
             if not self.display_config.gradcam_in_box_only and filtered_detections:
                 logging.debug("Redrawing detection overlays on top of full GradCAM overlay")
-                self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+                frame_with_overlays = self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
         elif self.display_config.gradcam_enabled and gradcam_img is None:
             # GradCAM is enabled but no image available - this is normal when GradCAM fails
             # The frame_with_overlays already contains the detection boxes, so no action needed
@@ -407,7 +407,7 @@ class VideoInferenceApp:
                 frame_with_overlays = frame_for_display.copy()
                 # Redraw detection overlays on the fresh frame
                 if filtered_detections:
-                    self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+                    frame_with_overlays = self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
         elif not self.display_config.gradcam_enabled:
             # GradCAM is disabled - frame_with_overlays already contains detection boxes
             logging.debug("GradCAM disabled - displaying normal frame with detections")
@@ -431,7 +431,7 @@ class VideoInferenceApp:
             logging.error("Final frame is invalid, returning original frame as fallback")
             frame_with_overlays = frame_for_display.copy()
             if filtered_detections:
-                self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
+                frame_with_overlays = self.visualizer.draw_detection_overlays(frame_with_overlays, filtered_detections)
         
         return frame_with_overlays
     

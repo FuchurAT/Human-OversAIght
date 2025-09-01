@@ -13,7 +13,7 @@ ENABLE_COUNTER_DISPLAY = True
 APPLICATIONS = {
     'app_01': {
         'name': 'Application 01',
-        'screen_id': 1,  # Primary monitor (0), secondary (1), etc.
+        'screen_id': 0,  # Primary monitor (0), secondary (1), etc.
         'video_folder': '/home/theopsroom/Documents/NEW', #/home/theopsroom/Human-OversAIght/data/videos/horizontal
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
@@ -380,7 +380,6 @@ BUTTON_ACTIONS = {
     'restart_video': {'type': 'immediate', 'requires_confirmation': False},
     'pause_resume': {'type': 'toggle', 'requires_confirmation': False},
     'fast_forward': {'type': 'hold', 'requires_confirmation': False},
-
     'home': {'type': 'immediate', 'requires_confirmation': False},
     'toggle_legend': {'type': 'toggle', 'requires_confirmation': False},
     'toggle_fps': {'type': 'toggle', 'requires_confirmation': False},
@@ -403,22 +402,18 @@ BUTTON_ACTIONS = {
     'threshold_1.0': {'type': 'immediate', 'requires_confirmation': False},
     'increase_threshold': {'type': 'hold', 'requires_confirmation': False},
     'decrease_threshold': {'type': 'hold', 'requires_confirmation': False},
-
     'reset_display': {'type': 'immediate', 'requires_confirmation': True},
-
     'jump_frame_forward': {'type': 'immediate', 'requires_confirmation': False},
     'jump_frame_backward': {'type': 'immediate', 'requires_confirmation': False},
     'toggle_edge_detection': {'type': 'toggle', 'requires_confirmation': False},
-
     'clear_detections': {'type': 'immediate', 'requires_confirmation': True},
     'reset_counter': {'type': 'immediate', 'requires_confirmation': True}, 
-
 }
 
 # Counter Display Configuration
 COUNTER_CONFIG = {
     'enabled': False,
-    'position': 'top_right',  # 'top_left', 'top_right', 'bottom_left', 'bottom_right'
+    'position': 'top_left',  # 'top_left', 'top_right', 'bottom_left', 'bottom_right'
     'font_scale': 1.0,
     'font_thickness': 2,
     'text_color': (255, 255, 255),  # White
@@ -438,8 +433,7 @@ FEEDBACK_CONFIG = {
     'fade_in_duration': 0.1,            # Fade in duration in seconds
     'fade_out_duration': 0.3,           # Fade out duration in seconds
     'total_duration': 0.8,              # Total feedback duration in seconds
-    'position': 'center',               # 'center', 'top_left', 'top_right', 'bottom_left', 'bottom_right', 'random'
-    'offset_x': 400,                      # X offset from position (pixels)
+    'offset_x': 40,                      # X offset from position (pixels)
     'offset_y': 40,                      # Y offset from position (pixels)
     'min_alpha': 0.0,                   # Minimum alpha (transparency)
     'max_alpha': 0.8,                   # Maximum alpha (opacity)

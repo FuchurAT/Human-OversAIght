@@ -533,7 +533,7 @@ class DetectionVisualizer:
                 print(f"Error restarting ambient sound: {e}")
                 self.current_ambient = None
     
-    def draw_detection_overlays(self, frame: np.ndarray, detections: List[Detection]) -> None:
+    def draw_detection_overlays(self, frame: np.ndarray, detections: List[Detection]) -> np.ndarray:
         """Draw detection overlays on the frame"""
         # Update feedback overlay with current frame dimensions
         if hasattr(self, 'feedback_overlay') and self.feedback_overlay:
@@ -563,7 +563,8 @@ class DetectionVisualizer:
                 self._draw_enemy_indicators(frame, detection.box, color)
         
         # Draw feedback overlays on top of detection overlays
-        frame = self.feedback_overlay.draw_feedbacks(frame)
+        result_frame = self.feedback_overlay.draw_feedbacks(frame, debug_save=False)
+        return result_frame
     
     def trigger_button_feedback(self, action_name: str, position: Tuple[int, int] = None):
         """Trigger visual feedback for a button press"""
@@ -581,6 +582,26 @@ class DetectionVisualizer:
     def clear_feedbacks(self):
         """Clear all active feedback overlays"""
         self.feedback_overlay.clear_all_feedbacks()
+    
+    def clear_feedbacks_immediately(self):
+        """Clear all feedback overlays immediately without waiting for duration to expire"""
+        self.feedback_overlay.clear_feedbacks_immediately()
+    
+    def disable_feedback(self):
+        """Temporarily disable feedback (circles won't appear)"""
+        self.feedback_overlay.disable_feedback()
+    
+    def enable_feedback(self):
+        """Re-enable feedback after disabling"""
+        self.feedback_overlay.enable_feedback()
+    
+    def is_feedback_enabled(self) -> bool:
+        """Check if feedback is currently enabled"""
+        return self.feedback_overlay.is_feedback_enabled()
+    
+    def get_feedback_info(self) -> List[Dict]:
+        """Get detailed information about all active feedbacks for debugging"""
+        return self.feedback_overlay.get_feedback_info()
     
     def get_feedback_count(self) -> int:
         """Get the number of active feedback overlays"""
