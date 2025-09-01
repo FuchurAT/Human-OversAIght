@@ -274,6 +274,10 @@ class VideoInferenceApp:
         
         old_folder = self.video_path
         old_index = self.current_folder_index
+        old_video_files = self.refresh_video_files() if os.path.exists(old_folder) else []
+        
+        logging.info(f"Switching from folder {old_index + 1}/{len(self.video_folders)}: {old_folder}")
+        logging.info(f"Old folder had {len(old_video_files)} video files")
         
         # Find next valid folder
         attempts = 0
@@ -284,23 +288,32 @@ class VideoInferenceApp:
             self.current_folder_index = (self.current_folder_index + 1) % len(self.video_folders)
             new_folder = self.video_folders[self.current_folder_index]
             
+            logging.info(f"Trying folder {self.current_folder_index + 1}/{len(self.video_folders)}: {new_folder}")
+            
             # Check if this folder exists and has videos
             if os.path.exists(new_folder):
                 video_files = [f for f in os.listdir(new_folder) if f.endswith('.mp4')]
-                
                 if video_files:
                     self.video_path = new_folder
-                    logging.info(f"Switched to folder {self.current_folder_index + 1}/{len(self.video_folders)}: {self.video_path}")
-                    logging.info(f"Found {len(video_files)} video files in new folder")
+                    logging.info(f"Successfully switched to folder {self.current_folder_index + 1}/{len(self.video_folders)}: {self.video_path}")
+                    logging.info(f"New folder has {len(video_files)} video files")
+                    logging.info(f"New video files: {video_files[:5]}")
+                    
+                    # Verify this is actually a different folder
+                    if new_folder == old_folder:
+                        logging.warning("Switched to same folder - this shouldn't happen")
+                    else:
+                        logging.info("Successfully switched to different folder")
                     
                     # Trigger visual feedback for folder switch
                     if hasattr(self, 'visualizer') and self.visualizer:
                         self.visualizer.trigger_key_feedback(ord('f'))
                     
-                    # After switching folders, automatically trigger next video to show content from new folder
+                    # After switching folders, immediately signal next video to show content from new folder
                     logging.info(f"Auto-triggering next video after folder switch from {old_folder} to {self.video_path}")
                     self._button_next_video_signal = True
-                    #self.signal_next_video()
+                    # Also call the signal method directly to ensure it's processed
+                    self.signal_next_video()
                     return
                 else:
                     logging.warning(f"Folder {new_folder} exists but contains no .mp4 files")
@@ -315,6 +328,13 @@ class VideoInferenceApp:
                 self.current_folder_index = old_index
                 self.video_path = old_folder
                 return
+    
+    def force_refresh_video_files(self) -> list:
+        """Force refresh the video file list and return the new list"""
+        logging.info(f"Force refreshing video files from current folder: {self.video_path}")
+        new_files = self.refresh_video_files()
+        logging.info(f"Force refresh complete: {len(new_files)} files found")
+        return new_files
     
     def log_current_state(self) -> None:
         """Log the current state for debugging purposes"""
@@ -343,15 +363,26 @@ class VideoInferenceApp:
     def refresh_video_files(self) -> list:
         """Refresh the list of video files from the current folder"""
         try:
+            logging.info(f"Refreshing video files from: {self.video_path}")
             if os.path.exists(self.video_path):
-                video_files = [f for f in os.listdir(self.video_path) if f.endswith('.mp4')]
-                logging.info(f"Refreshed video files from {self.video_path}: {len(video_files)} files found")
+                all_files = os.listdir(self.video_path)
+                logging.info(f"All files in folder: {len(all_files)} files")
+                logging.info(f"Sample files: {all_files[:5] if all_files else 'None'}")
+                
+                video_files = [f for f in all_files if f.endswith('.mp4')]
+                logging.info(f"Video files found: {len(video_files)} .mp4 files")
+                if video_files:
+                    logging.info(f"Video file names: {video_files[:5]}")
+                else:
+                    logging.warning(f"No .mp4 files found in {self.video_path}")
                 return video_files
             else:
                 logging.warning(f"Current video path does not exist: {self.video_path}")
                 return []
         except Exception as e:
             logging.error(f"Error refreshing video files: {e}")
+            import traceback
+            logging.error(f"Traceback: {traceback.format_exc()}")
             return []
     
     def get_current_folder_info(self) -> dict:
@@ -718,12 +749,11 @@ class VideoInferenceApp:
                 cv2.moveWindow("Legend Display", x_offset, y_offset)
                 logging.info(f"Positioned legend window at ({x_offset}, {y_offset})")
                 
-                # Force window to appear at the correct position
-                cv2.imshow("Legend Display", text_frame)
-                cv2.waitKey(1)
-                
-                # Now set fullscreen properties
+                # Now set fullscreen properties without showing dummy content
                 cv2.setWindowProperty("Legend Display", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                
+                # Show the actual legend content
+                cv2.imshow("Legend Display", text_frame)
                 
             except Exception as e:
                 logging.warning(f"Failed to position legend window: {e}")
@@ -741,6 +771,48 @@ class VideoInferenceApp:
             # Single monitor or no screen config
             cv2.namedWindow("Legend Display", cv2.WINDOW_NORMAL)
             cv2.imshow("Legend Display", text_frame)
+    
+    def _cleanup_legend_window(self) -> None:
+        """Clean up the legend window specifically to prevent black squares"""
+        try:
+            if cv2.getWindowProperty("Legend Display", cv2.WND_PROP_VISIBLE) >= 0:
+                cv2.destroyWindow("Legend Display")
+                logging.info("Destroyed legend window to prevent black squares")
+        except Exception as e:
+            logging.debug(f"Legend window cleanup: {e}")
+    
+    def _cleanup_windows(self) -> None:
+        """Clean up all OpenCV windows to prevent black squares"""
+        try:
+            # Get all window names
+            window_names = []
+            
+            # Clean up main window
+            try:
+                if cv2.getWindowProperty("Object detection Main", cv2.WND_PROP_VISIBLE) >= 0:
+                    window_names.append("Object detection Main")
+                    cv2.destroyWindow("Object detection Main")
+            except:
+                pass
+            
+            # Clean up legend window
+            try:
+                if cv2.getWindowProperty("Legend Display", cv2.WND_PROP_VISIBLE) >= 0:
+                    window_names.append("Legend Display")
+                    cv2.destroyWindow("Legend Display")
+            except:
+                pass
+            
+            # Destroy any remaining windows
+            cv2.destroyAllWindows()
+            logging.info(f"Destroyed {len(window_names)} OpenCV windows: {window_names}")
+            
+            # Force a small delay to ensure windows are fully destroyed
+            import time
+            time.sleep(0.1)
+            
+        except Exception as e:
+            logging.warning(f"Error during window cleanup: {e}")
     
     def _setup_fullscreen_window(self, window_name: str) -> None:
         """Setup fullscreen window with proper properties and screen positioning"""
@@ -767,11 +839,6 @@ class VideoInferenceApp:
                 cv2.moveWindow(window_name, x_offset, y_offset)
                 logging.info(f"Positioned window '{window_name}' at ({x_offset}, {y_offset})")
                 
-                # Force window to appear at the correct position
-                dummy = np.zeros((100, 100, 3), dtype=np.uint8)
-                cv2.imshow(window_name, dummy)
-                cv2.waitKey(1)
-                
                 # Additional positioning verification
                 logging.info(f"Window '{window_name}' should now be at position ({x_offset}, {y_offset})")
                 
@@ -790,12 +857,7 @@ class VideoInferenceApp:
         
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         
-        # Force window to appear and go fullscreen
-        dummy = np.zeros((100, 100, 3), dtype=np.uint8)
-        cv2.imshow(window_name, dummy)
-        cv2.waitKey(1)
-        
-        # Final fullscreen setup
+        # Final fullscreen setup - no dummy windows needed
         try:
             cv2.setWindowProperty(window_name, cv2.WND_PROP_BORDERLESS, 1)
         except Exception:
@@ -804,6 +866,10 @@ class VideoInferenceApp:
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         
         logging.info(f"Fullscreen window '{window_name}' setup complete")
+        
+        # Small delay to ensure window is properly set up
+        import time
+        time.sleep(0.05)
     
     def _handle_key_input(self, key: int, cap, out_writer) -> Tuple[bool, bool]:
         """Handle keyboard input and return (should_exit, should_next_video)"""
@@ -959,12 +1025,40 @@ class VideoInferenceApp:
             # Check if we need to refresh video files (e.g., after folder switch)
             if hasattr(self, '_button_next_folder_signal') and self._button_next_folder_signal:
                 logging.info("Folder switch detected, refreshing video file list...")
-                mp4_files = self.refresh_video_files()
+                old_mp4_files = mp4_files.copy() if mp4_files else []
+                mp4_files = self.force_refresh_video_files()
                 if not mp4_files:
                     logging.error(f"No video files found in new folder: {self.video_path}")
                     return
                 self._button_next_folder_signal = False  # Reset the flag
+                logging.info(f"Video file list refreshed: {len(mp4_files)} files in {self.video_path}")
+                logging.info(f"Old list had {len(old_mp4_files)} files, new list has {len(mp4_files)} files")
+                if old_mp4_files != mp4_files:
+                    logging.info("Video file list successfully updated")
+                else:
+                    logging.warning("Video file list unchanged - this might indicate an issue")
+            
+            # Also check if we need to refresh due to next video signal after folder switch
+            if hasattr(self, '_button_next_video_signal') and self._button_next_video_signal:
+                logging.info("Next video signal detected, checking if video file list needs refresh...")
+                # Check if current mp4_files list matches current folder
+                current_folder_files = self.force_refresh_video_files()
+                logging.info(f"Current mp4_files list: {len(mp4_files)} files")
+                logging.info(f"Refreshed folder files: {len(current_folder_files)} files")
+                logging.info(f"Current folder: {self.video_path}")
                 
+                if current_folder_files != mp4_files:
+                    logging.info("Video file list mismatch detected, updating...")
+                    mp4_files = current_folder_files
+                    logging.info(f"Updated video file list: {len(mp4_files)} files in {self.video_path}")
+                else:
+                    logging.info("Video file list is up to date")
+                self._button_next_video_signal = False  # Reset the flag
+            
+            # Log current state for debugging
+            logging.info(f"Starting video loop with {len(mp4_files)} files from folder: {self.video_path}")
+            logging.info(f"mp4_files list: {mp4_files[:3] if mp4_files else 'None'}")
+            
             for mp4 in mp4_files:
                 # Check stop event before processing each video
                 if stop_event and stop_event.is_set():
@@ -973,6 +1067,15 @@ class VideoInferenceApp:
                     
                 print(f"Processing: {mp4}")
                 video_file_path = os.path.join(self.video_path, mp4)
+                logging.info(f"Processing video: {mp4} from path: {video_file_path}")
+                logging.info(f"Current video_path: {self.video_path}")
+                
+                # Verify the video file actually exists
+                if not os.path.exists(video_file_path):
+                    logging.error(f"Video file not found: {video_file_path}")
+                    logging.error(f"Current folder: {self.video_path}")
+                    logging.error(f"mp4_files list: {mp4_files}")
+                    continue
                 
                 cap = cv2.VideoCapture(video_file_path)
                 if not cap.isOpened():
@@ -1022,6 +1125,15 @@ class VideoInferenceApp:
 
                 # Setup fullscreen window
                 window_name = 'Object detection Main'
+                
+                # Check if window already exists and destroy it to prevent black square
+                if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) >= 0:
+                    cv2.destroyWindow(window_name)
+                    logging.info("Destroyed existing window to prevent black square")
+                
+                # Use the new window cleanup method to ensure clean fullscreen setup
+                self._cleanup_windows()
+                
                 self._setup_fullscreen_window(window_name)
 
                 # Main video processing loop
@@ -1148,7 +1260,18 @@ class VideoInferenceApp:
                         
                         # Display frame
                         try:
+                            # Ensure the main window exists before displaying
+                            if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 0:
+                                logging.warning("Main window not visible, recreating...")
+                                self._cleanup_windows()
+                                self._setup_fullscreen_window(window_name)
+                            
+                            # Display the frame without creating temporary windows
                             first_frame, fullscreen_size = self._display_frame_fullscreen(window_name, display_img, first_frame, fullscreen_size)
+                            
+                            # Small delay to ensure frame is displayed properly
+                            cv2.waitKey(1)
+                            
                         except Exception as e:
                             logging.warning(f"Error displaying frame: {e}")
                             # Continue with next frame
@@ -1203,9 +1326,17 @@ class VideoInferenceApp:
                             # After switching folders, we need to break out of the current video loop
                             # and refresh the video file list to start fresh with the new folder
                             logging.info("Breaking out of current video loop to refresh video files from new folder")
+                            # Force the next video to start immediately
+                            should_next_video = True
+                            # Use the new window cleanup method to prevent black squares
+                            self._cleanup_windows()
+                            logging.info("About to break out of video loop...")
                             break
                         
                         if should_exit:
+                            # Use the new window cleanup method to prevent black squares
+                            self._cleanup_windows()
+                            
                             self._cleanup_resources()
                             if out_writer:
                                 out_writer.release()
@@ -1216,6 +1347,10 @@ class VideoInferenceApp:
                             if out_writer:
                                 out_writer.release()
                             cap.release()
+                            
+                            # Use the new window cleanup method to prevent black squares
+                            self._cleanup_windows()
+                            
                             self._cleanup_video_resources()
                             # Reset GradCAM state for next video
                             self._reset_gradcam_state()
@@ -1488,3 +1623,36 @@ class VideoInferenceApp:
         else:
             logging.info(f"NDI output disabled for app {self.app_id}")
         return self.display_config.ndi_enabled 
+
+    def _cleanup_windows(self) -> None:
+        """Clean up all OpenCV windows to prevent black squares"""
+        try:
+            # Get all window names
+            window_names = []
+            
+            # Clean up main window
+            try:
+                if cv2.getWindowProperty("Object detection Main", cv2.WND_PROP_VISIBLE) >= 0:
+                    window_names.append("Object detection Main")
+                    cv2.destroyWindow("Object detection Main")
+            except:
+                pass
+            
+            # Clean up legend window
+            try:
+                if cv2.getWindowProperty("Legend Display", cv2.WND_PROP_VISIBLE) >= 0:
+                    window_names.append("Legend Display")
+                    cv2.destroyWindow("Legend Display")
+            except:
+                pass
+            
+            # Destroy any remaining windows
+            cv2.destroyAllWindows()
+            logging.info(f"Destroyed {len(window_names)} OpenCV windows: {window_names}")
+            
+            # Force a small delay to ensure windows are fully destroyed
+            import time
+            time.sleep(0.1)
+            
+        except Exception as e:
+            logging.warning(f"Error during window cleanup: {e}") 
