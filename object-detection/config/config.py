@@ -14,12 +14,12 @@ APPLICATIONS = {
     'app_01': {
         'name': 'Application 01',
         'screen_id': 1,  # Primary monitor (0), secondary (1), etc.
-        'video_folder': 'E:/Projects/human-oversaight/data/videos/horizontal',
-        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
+        'video_folder': '/home/theopsroom/Documents/NEW', #/home/theopsroom/Human-OversAIght/data/videos/horizontal
+        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
         'enabled': True,
         'ndi': {
-            'enabled': True,
+            'enabled': False,
             'source_name': 'Human-OversAIght-App01',
             'group_name': 'Detection-Apps',
             'video_format': 'BGRX',
@@ -30,13 +30,13 @@ APPLICATIONS = {
     },
     'app_02': {
         'name': 'Application 02', 
-        'screen_id': 1,  # Secondary monitor
-        'video_folder': 'E:/Projects/human-oversaight/data/videos/vertical',
-        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
+        'screen_id': 0,  # Secondary monitor
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/vertical',
+        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
-        'enabled': True,
+        'enabled': False,
         'ndi': {
-            'enabled': True,
+            'enabled': False,
             'source_name': 'Human-OversAIght-App02',
             'group_name': 'Detection-Apps',
             'video_format': 'BGRX',
@@ -48,8 +48,25 @@ APPLICATIONS = {
     'app_03': {
         'name': 'Application 03',
         'screen_id': 0,  # Same screen as app_01 but different position
-        'video_folder': 'E:/Projects/human-oversaight/data/videos',
-        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
+        'video_folder': '/home/theopsroom/Human-OversAIght/data/videos/square',
+        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'window_title': 'Object Detection - App 03',
+        'enabled': False,  # Disabled by default
+        'ndi': {
+            'enabled': False,
+            'source_name': 'Human-OversAIght-App03',
+            'group_name': 'Detection-Apps',
+            'video_format': 'BGRX',
+            'frame_rate': 30,
+            'video_width': 1920,
+            'video_height': 1080
+        }
+    },
+    'app_04': {
+        'name': 'Application 04',
+        'screen_id': 0,  # Same screen as app_01 but different position
+        'video_folder': '/home/theopsroom/Documents/NEW-R',
+        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
         'enabled': False,  # Disabled by default
         'ndi': {
@@ -67,9 +84,9 @@ APPLICATIONS = {
 # Screen Configuration
 # Maps screen IDs to display settings
 SCREEN_CONFIG = {
-    1: {  # Primary monitor
-        'width': 2560,
-        'height': 1440,
+    0: {  # Leftmost monitor
+        'width': 1920,
+        'height': 1080,
         'x_offset': 0,
         'y_offset': 0,
         'scale_mode': 'fit',
@@ -77,10 +94,10 @@ SCREEN_CONFIG = {
         'maintain_aspect_ratio': True,
         'center_video': True
     },
-    2: {  # Secondary monitor
+    1: {  # Middle monitor
         'width': 1920,
         'height': 1080,
-        'x_offset': 2560,
+        'x_offset': 1920,  # Starts where screen 0 ends
         'y_offset': 0,
         'scale_mode': 'fit',
         'scale_multiplier': 1,
@@ -119,7 +136,7 @@ DEFAULT_GRADCAM_ALPHA = 1
 DEFAULT_FPS = 20
 
 # NDI Settings
-DEFAULT_NDI_ENABLED = True
+DEFAULT_NDI_ENABLED = False
 DEFAULT_NDI_SOURCE_NAME = "Human-OversAIght-Detection"
 DEFAULT_NDI_GROUP_NAME = ""
 DEFAULT_NDI_VIDEO_FORMAT = "BGRX"  # BGRX, UYVY, RGBX, etc.
@@ -226,7 +243,7 @@ BUTTON_MAPPING = {
 #     3: {'key': 'r', 'action': 'restart_video', 'description': 'Restart current video'},
 #     4: {'key': 's', 'action': 'pause_resume', 'description': 'Pause/Resume video'},
 #     5: {'key': 'f', 'action': 'fast_forward', 'description': 'Fast forward'},
-#     6: {'key': 'b', 'action': 'rewind', 'description': 'Rewind'},
+
 #     7: {'key': 'h', 'action': 'home', 'description': 'Go to first video'},
 #     
 #     # Display Controls (Buttons 8-15)
@@ -255,29 +272,16 @@ BUTTON_MAPPING = {
 #     26: {'key': '0', 'action': 'threshold_1.0', 'description': 'Set confidence threshold to 1.0'},
 #     27: {'key': 'i', 'action': 'increase_threshold', 'description': 'Increase confidence threshold'},
 #     28: {'key': 'd', 'action': 'decrease_threshold', 'description': 'Decrease confidence threshold'},
-#     29: {'key': 'm', 'action': 'toggle_memory_cleanup', 'description': 'Toggle memory cleanup'},
-#     30: {'key': 'a', 'action': 'toggle_audio', 'description': 'Toggle audio effects'},
-#     31: {'key': 't', 'action': 'toggle_training_mode', 'description': 'Toggle training mode'},
+
 #     
 #     # Utility Controls (Buttons 32-39)
-#     32: {'key': 'o', 'action': 'toggle_output', 'description': 'Toggle output recording'},
 #     33: {'key': 'z', 'action': 'reset_display', 'description': 'Reset display settings'},
-#     34: {'key': 'x', 'action': 'export_results', 'description': 'Export detection results'},
-#     35: {'key': 'y', 'action': 'save_screenshot', 'description': 'Save current frame'},
-#     36: {'key': 'u', 'action': 'toggle_ui', 'description': 'Toggle UI elements'},
 #     37: {'key': 'j', 'action': 'jump_frame_forward', 'description': 'Jump 10 frames forward'},
 #     38: {'key': 'k', 'action': 'jump_frame_backward', 'description': 'Jump 10 frames backward'},
 #     39: {'key': 'e', 'action': 'toggle_edge_detection', 'description': 'Toggle edge detection'},
 #     
 #     # Reserved/Experimental Controls (Buttons 40-47)
-#     40: {'key': 'tab', 'action': 'cycle_view_mode', 'description': 'Cycle through view modes'},
-#     41: {'key': 'enter', 'action': 'confirm_action', 'description': 'Confirm current action'},
-#     42: {'key': 'backspace', 'action': 'undo_action', 'description': 'Undo last action'},
 #     43: {'key': 'delete', 'action': 'clear_detections', 'description': 'Clear all detections'},
-#     44: {'key': 'insert', 'action': 'insert_marker', 'description': 'Insert frame marker'},
-#     45: {'key': 'home', 'action': 'go_to_start', 'description': 'Go to video start'},
-#     46: {'key': 'end', 'action': 'go_to_end', 'description': 'Go to video end'},
-#     47: {'key': 'escape', 'action': 'emergency_stop', 'description': 'Emergency stop'}
 # }
 
 # Button Configuration
@@ -294,7 +298,7 @@ BUTTON_CONFIG = {
 
 # LED Configuration
 LED_CONFIG = {
-    'enabled': False,                    # Enable LED control
+    'enabled': True,                    # Enable LED control
     'serial_port': '/dev/ttyUSB0',     # Serial port for Arduino Nano (LED control)
     'baud_rate': 115200,               # Baud rate for LED communication
     'update_interval_ms': 20,          # LED update interval (20ms = 50 FPS)
@@ -376,7 +380,7 @@ BUTTON_ACTIONS = {
     'restart_video': {'type': 'immediate', 'requires_confirmation': False},
     'pause_resume': {'type': 'toggle', 'requires_confirmation': False},
     'fast_forward': {'type': 'hold', 'requires_confirmation': False},
-    'rewind': {'type': 'hold', 'requires_confirmation': False},
+
     'home': {'type': 'immediate', 'requires_confirmation': False},
     'toggle_legend': {'type': 'toggle', 'requires_confirmation': False},
     'toggle_fps': {'type': 'toggle', 'requires_confirmation': False},
@@ -399,26 +403,16 @@ BUTTON_ACTIONS = {
     'threshold_1.0': {'type': 'immediate', 'requires_confirmation': False},
     'increase_threshold': {'type': 'hold', 'requires_confirmation': False},
     'decrease_threshold': {'type': 'hold', 'requires_confirmation': False},
-    'toggle_memory_cleanup': {'type': 'toggle', 'requires_confirmation': False},
-    'toggle_audio': {'type': 'toggle', 'requires_confirmation': False},
-    'toggle_training_mode': {'type': 'toggle', 'requires_confirmation': False},
-    'toggle_output': {'type': 'toggle', 'requires_confirmation': False},
+
     'reset_display': {'type': 'immediate', 'requires_confirmation': True},
-    'export_results': {'type': 'immediate', 'requires_confirmation': False},
-    'save_screenshot': {'type': 'immediate', 'requires_confirmation': False},
-    'toggle_ui': {'type': 'toggle', 'requires_confirmation': False},
+
     'jump_frame_forward': {'type': 'immediate', 'requires_confirmation': False},
     'jump_frame_backward': {'type': 'immediate', 'requires_confirmation': False},
     'toggle_edge_detection': {'type': 'toggle', 'requires_confirmation': False},
-    'cycle_view_mode': {'type': 'immediate', 'requires_confirmation': False},
-    'confirm_action': {'type': 'immediate', 'requires_confirmation': False},
-    'undo_action': {'type': 'immediate', 'requires_confirmation': False},
+
     'clear_detections': {'type': 'immediate', 'requires_confirmation': True},
-    'reset_counter': {'type': 'immediate', 'requires_confirmation': True},
-    'insert_marker': {'type': 'immediate', 'requires_confirmation': False},
-    'go_to_start': {'type': 'immediate', 'requires_confirmation': False},
-    'go_to_end': {'type': 'immediate', 'requires_confirmation': False},
-    'emergency_stop': {'type': 'immediate', 'requires_confirmation': False}
+    'reset_counter': {'type': 'immediate', 'requires_confirmation': True}, 
+
 }
 
 # Counter Display Configuration
@@ -433,6 +427,74 @@ COUNTER_CONFIG = {
     'x_offset': 20,
     'y_offset': 50,
     'line_height': 30
+}
+
+# Visual Feedback Configuration
+# Controls the appearance of feedback circles when buttons or keys are pressed
+FEEDBACK_CONFIG = {
+    'enabled': True,                    # Enable visual feedback
+    'default_color': (0, 0, 255),      # Default color (BGR format) - Red
+    'default_radius': 20,               # Default circle radius in pixels
+    'fade_in_duration': 0.1,            # Fade in duration in seconds
+    'fade_out_duration': 0.3,           # Fade out duration in seconds
+    'total_duration': 0.8,              # Total feedback duration in seconds
+    'position': 'center',               # 'center', 'top_left', 'top_right', 'bottom_left', 'bottom_right', 'random'
+    'offset_x': 400,                      # X offset from position (pixels)
+    'offset_y': 40,                      # Y offset from position (pixels)
+    'min_alpha': 0.0,                   # Minimum alpha (transparency)
+    'max_alpha': 0.8,                   # Maximum alpha (opacity)
+    'blend_mode': 'alpha',              # 'alpha' for transparency, 'add' for additive blending
+}
+
+# Action-specific feedback colors
+# Maps action names to specific colors for visual feedback
+ACTION_FEEDBACK_COLORS = {
+    'exit': (0, 0, 255),               # Red
+    'next_video': (0, 255, 0),         # Green
+    'previous_video': (0, 255, 255),   # Yellow
+    'restart_video': (255, 0, 255),    # Magenta
+    'pause_resume': (255, 255, 0),     # Cyan
+    'fast_forward': (0, 128, 255),     # Orange
+    'home': (255, 128, 0),             # Blue-Orange
+    'toggle_legend': (128, 255, 128),  # Light Green
+    'toggle_fps': (255, 128, 128),     # Light Red
+    'toggle_gradcam': (128, 128, 255), # Light Blue
+    'toggle_gradcam_box': (255, 255, 128), # Light Yellow
+    'toggle_glitches': (255, 128, 255), # Light Magenta
+    'toggle_center_display': (128, 255, 255), # Light Cyan
+    'toggle_visualization': (255, 255, 255), # White
+    'toggle_debug': (64, 64, 64),      # Dark Gray
+    'toggle_unmask': (0, 255, 128),    # Green-Blue
+    'threshold_0.1': (0, 25, 255),     # Dark Red
+    'threshold_0.2': (0, 51, 255),     # Darker Red
+    'threshold_0.3': (0, 76, 255),     # Medium Red
+    'threshold_0.4': (0, 102, 255),    # Light Red
+    'threshold_0.5': (0, 128, 255),    # Orange
+    'threshold_0.6': (0, 153, 255),    # Light Orange
+    'threshold_0.7': (0, 179, 255),    # Yellow-Orange
+    'threshold_0.8': (0, 204, 255),    # Light Yellow
+    'threshold_0.9': (0, 230, 255),    # Very Light Yellow
+    'threshold_1.0': (0, 255, 255),    # Yellow
+    'increase_threshold': (0, 255, 0), # Green
+    'decrease_threshold': (255, 0, 0), # Blue
+    'reset_display': (255, 0, 0),      # Blue
+    'jump_frame_forward': (0, 255, 255), # Yellow
+    'jump_frame_backward': (255, 0, 255), # Magenta
+    'toggle_edge_detection': (165, 42, 42), # Brown
+    'clear_detections': (255, 0, 0),   # Blue
+    'reset_counter': (255, 140, 0),    # Dark Orange
+}
+
+# Key-specific feedback colors (for keyboard input)
+KEY_FEEDBACK_COLORS = {
+    ord('q'): (0, 0, 255),            # Red for quit
+    ord('n'): (0, 255, 0),            # Green for next
+    ord('b'): (0, 255, 255),          # Yellow for toggle
+    ord('l'): (128, 255, 128),        # Light Green for legend
+    ord('f'): (255, 128, 128),        # Light Red for FPS
+    ord('d'): (128, 128, 255),        # Light Blue for debug/NDI
+    27: (255, 0, 0),                  # Blue for ESC
+    32: (0, 255, 128),                # Green-Blue for space
 }
 
 # Logging Configuration

@@ -18,6 +18,8 @@ from config.config import (
 
 from application.models import Detection, DisplayConfig
 from application.color_manager import ColorManager
+from application.feedback_overlay import FeedbackOverlay
+
 
 def get_devices(capture_devices: bool = False) -> Tuple[str, ...]:
     init_by_me = not pygame.mixer.get_init()
@@ -32,7 +34,7 @@ devices = get_devices()
 
 if not devices:
     raise RuntimeError("No device!")
-device = devices[0] #change back to device[1]
+device = devices[2] #change back to device[1]
 
 print(devices)
 print(f"Selected audio device: {device}")
@@ -50,6 +52,9 @@ class DetectionVisualizer:
         self.current_fps = 0
         self.last_fps_text = "FPS: 0.0"
         self.last_inf_text = "Inference: 0.0 ms"
+        
+        # Initialize feedback overlay system
+        self.feedback_overlay = FeedbackOverlay()
         
         # Initialize pygame mixer for audio playback
         self.audio_available = False
@@ -129,7 +134,7 @@ class DetectionVisualizer:
                 devicename=device,
                 frequency=22050,      # Lower frequency for Bluetooth stability
                 size=-16,            # 16-bit audio
-                channels=2,          # Stereo
+                channels=6,          # Stereo
                 buffer=1024,         # Larger buffer for Bluetooth latency
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -144,7 +149,7 @@ class DetectionVisualizer:
                 devicename=device,
                 frequency=22050,      # Very low frequency
                 size=-16,            # 16-bit audio
-                channels=2,          # Mono (more stable for Bluetooth)
+                channels=6,          # Mono (more stable for Bluetooth)
                 buffer=2048,         # Very large buffer
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -161,7 +166,7 @@ class DetectionVisualizer:
                 devicename=device,
                 frequency=22050,
                 size=-16,
-                channels=2,
+                channels=6,
                 buffer=512,
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -177,7 +182,7 @@ class DetectionVisualizer:
                 devicename=device,
                 frequency=8000,       # Very low frequency
                 size=-8,             # 8-bit audio
-                channels=2,          # Mono
+                channels=6,          # Mono
                 buffer=4096,         # Maximum buffer
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -530,6 +535,10 @@ class DetectionVisualizer:
     
     def draw_detection_overlays(self, frame: np.ndarray, detections: List[Detection]) -> None:
         """Draw detection overlays on the frame"""
+        # Update feedback overlay with current frame dimensions
+        if hasattr(self, 'feedback_overlay') and self.feedback_overlay:
+            self.feedback_overlay.set_frame_dimensions(frame.shape[1], frame.shape[0])
+        
         for i, detection in enumerate(detections):
             color = ColorManager.get_state_color(self.display_config.color_state, detection.confidence)
             #print(f"Detection {i}: box={detection.box}, color={color}, color_state={self.display_config.color_state}")
@@ -552,6 +561,47 @@ class DetectionVisualizer:
             
             if self.display_config.show_enemy:
                 self._draw_enemy_indicators(frame, detection.box, color)
+        
+        # Draw feedback overlays on top of detection overlays
+        frame = self.feedback_overlay.draw_feedbacks(frame)
+    
+    def trigger_button_feedback(self, action_name: str, position: Tuple[int, int] = None):
+        """Trigger visual feedback for a button press"""
+        self.feedback_overlay.add_feedback(action_name=action_name, position=position)
+    
+    def trigger_key_feedback(self, key_code: int, position: Tuple[int, int] = None):
+        """Trigger visual feedback for a key press"""
+        self.feedback_overlay.add_feedback(key_code=key_code, position=position)
+    
+    def trigger_custom_feedback(self, color: Tuple[int, int, int], position: Tuple[int, int] = None, 
+                               radius: int = None, duration: float = None):
+        """Trigger custom visual feedback with specified parameters"""
+        self.feedback_overlay.add_feedback(color=color, position=position, radius=radius, duration=duration)
+    
+    def clear_feedbacks(self):
+        """Clear all active feedback overlays"""
+        self.feedback_overlay.clear_all_feedbacks()
+    
+    def get_feedback_count(self) -> int:
+        """Get the number of active feedback overlays"""
+        return self.feedback_overlay.get_feedback_count()
+    
+    def set_feedback_config(self, config: dict):
+        """Update feedback configuration"""
+        self.feedback_overlay.set_config(config)
+    
+    def set_feedback_action_colors(self, colors: dict):
+        """Update action-specific feedback colors"""
+        self.feedback_overlay.set_action_colors(colors)
+    
+    def set_feedback_key_colors(self, colors: dict):
+        """Update key-specific feedback colors"""
+        self.feedback_overlay.set_key_colors(colors)
+    
+    def update_frame_dimensions(self, width: int, height: int):
+        """Update frame dimensions for feedback positioning"""
+        if hasattr(self, 'feedback_overlay') and self.feedback_overlay:
+            self.feedback_overlay.set_frame_dimensions(width, height)
     
     def _apply_blur_effect(self, frame: np.ndarray, box: Tuple[int, int, int, int]) -> None:
         """Apply pixelation effect to the detection box"""
@@ -626,7 +676,7 @@ class DetectionVisualizer:
         x1, y1, x2, y2 = box
         
         # Format coordinates text - show top-left and bottom-right coordinates
-        coords_text = f"({x1},{y1}) ({x2},{y2})"
+        coords_text = f"{x1},{y1} {x2},{y2}"
         
         # Draw coordinates text above the bounding box
         cv2.putText(frame, coords_text, (box[0], box[1] - 10), font, 0.6, color, 2)
@@ -644,15 +694,22 @@ class DetectionVisualizer:
     def draw_random_glitches(self, frame: np.ndarray) -> None:
         """Draw random glitch effects on the frame"""
         h, w = frame.shape[:2]
-        y = np.random.randint(h // 16, 3 * h // 4)
         
-        points = []
-        for x in range(0, w, 1):
-            offset = np.random.randint(-5, 6)
-            points.append((x, min(max(y + offset, 0), h - 1)))
+        # Use frame index to animate the glitch from left to right
+        glitch_width = min(w, (self.frame_idx % 60) * (w // 60))  # Animate over 60 frames
         
-        for i in range(len(points) - 1):
-            cv2.line(frame, points[i], points[i + 1], (0, 0, 0), 3)
+        if glitch_width > 0:
+            # Fixed vertical position for consistent glitch line
+            y = h // 3  # Fixed position at 1/3 of screen height
+            
+            points = []
+            for x in range(0, glitch_width, 1):
+                offset = np.random.randint(-3, 4)
+                points.append((x, min(max(y + offset, 0), h - 1)))
+            
+            # Draw lines from left to right, connecting consecutive points
+            for i in range(len(points) - 1):
+                cv2.line(frame, points[i], points[i + 1], (0, 0, 0), 1)
     
     def draw_legend(self, frame: np.ndarray, legend_dict: Dict[int, Tuple[float, Tuple[int, int, int]]], 
                     center: bool = False, font_scale: float = 0.7, line_height: int = 25, 

@@ -9,7 +9,7 @@ import time
 import logging
 import serial
 from typing import Optional
-from config.config import BUTTON_MAPPING, BUTTON_CONFIG, BUTTON_ACTIONS, APPLICATIONS, LED_CONFIG, LED_BUTTON_MAPPING, COUNTER_CONFIG
+from config.config import BUTTON_MAPPING, BUTTON_CONFIG, LED_CONFIG, LED_BUTTON_MAPPING, COUNTER_CONFIG
 from .led_controller import LEDController
 
 
@@ -80,7 +80,6 @@ class ButtonHandler:
             'restart_video': self._action_restart_video,
             'pause_resume': self._action_pause_resume,
             'fast_forward': self._action_fast_forward,
-            'rewind': self._action_rewind,
             'home': self._action_home,
             'toggle_legend': self._action_toggle_legend,
             'toggle_fps': self._action_toggle_fps,
@@ -103,26 +102,13 @@ class ButtonHandler:
             'threshold_1.0': lambda: self._action_set_threshold(1.0),
             'increase_threshold': self._action_increase_threshold,
             'decrease_threshold': self._action_decrease_threshold,
-            'toggle_memory_cleanup': self._action_toggle_memory_cleanup,
-            'toggle_audio': self._action_toggle_audio,
-            'toggle_training_mode': self._action_toggle_training_mode,
-            'toggle_output': self._action_toggle_output,
             'reset_display': self._action_reset_display,
-            'export_results': self._action_export_results,
-            'save_screenshot': self._action_save_screenshot,
-            'toggle_ui': self._action_toggle_ui,
             'jump_frame_forward': self._action_jump_frame_forward,
             'jump_frame_backward': self._action_jump_frame_backward,
             'toggle_edge_detection': self._action_toggle_edge_detection,
-            'cycle_view_mode': self._action_cycle_view_mode,
-            'confirm_action': self._action_confirm_action,
-            'undo_action': self._action_undo_action,
             'clear_detections': self._action_clear_detections,
             'reset_counter': self._action_reset_counter,
-            'insert_marker': self._action_insert_marker,
-            'go_to_start': self._action_go_to_start,
-            'go_to_end': self._action_go_to_end,
-            'emergency_stop': self._action_emergency_stop,
+
         }
     
     def add_app_instance(self, app_id: str, app_instance) -> None:
@@ -336,6 +322,13 @@ class ButtonHandler:
                         old_app_instance = getattr(self, '_current_app_instance', None)
                         self._current_app_instance = app_instance
                         
+                        # Trigger visual feedback for button press
+                        if hasattr(app_instance, 'visualizer') and app_instance.visualizer:
+                            # Calculate feedback position (center of the application window)
+                            # This will be overridden by the actual frame dimensions in the visualizer
+                            feedback_position = None  # Let the visualizer calculate position
+                            app_instance.visualizer.trigger_button_feedback(action_name, feedback_position)
+                        
                         self.action_callbacks[action_name]()
                         
                         # Restore previous app instance
@@ -486,12 +479,7 @@ class ButtonHandler:
             logging.info("Fast forward requested via button")
             # Signal fast forward through app instance
     
-    def _action_rewind(self):
-        """Rewind video"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            logging.info("Rewind requested via button")
-            # Signal rewind through app instance
+
     
     def _action_home(self):
         """Go to first video"""
@@ -586,33 +574,13 @@ class ButtonHandler:
             app_instance.box_threshold = new_threshold
             logging.info(f"Confidence threshold decreased to {new_threshold} via button")
     
-    def _action_toggle_memory_cleanup(self):
-        """Toggle memory cleanup"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance and hasattr(app_instance, 'memory_manager'):
-            # TODO: Implement memory cleanup toggle
-            logging.info("Memory cleanup toggle requested via button")
+
     
-    def _action_toggle_audio(self):
-        """Toggle audio effects"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance and hasattr(app_instance, 'visualizer'):
-            # TODO: Implement audio toggle
-            logging.info("Audio toggle requested via button")
+
     
-    def _action_toggle_training_mode(self):
-        """Toggle training mode"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement training mode toggle
-            logging.info("Training mode toggle requested via button")
+
     
-    def _action_toggle_output(self):
-        """Toggle output recording"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement output toggle
-            logging.info("Output toggle requested via button")
+
     
     def _action_reset_display(self):
         """Reset display settings"""
@@ -621,26 +589,11 @@ class ButtonHandler:
             # TODO: Implement display reset
             logging.info("Display reset requested via button")
     
-    def _action_export_results(self):
-        """Export detection results"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement results export
-            logging.info("Results export requested via button")
+
     
-    def _action_save_screenshot(self):
-        """Save current frame"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement screenshot save
-            logging.info("Screenshot save requested via button")
+
     
-    def _action_toggle_ui(self):
-        """Toggle UI elements"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement UI toggle
-            logging.info("UI toggle requested via button")
+
     
     def _action_jump_frame_forward(self):
         """Jump 10 frames forward"""
@@ -663,26 +616,11 @@ class ButtonHandler:
             # TODO: Implement edge detection toggle
             logging.info("Edge detection toggle requested via button")
     
-    def _action_cycle_view_mode(self):
-        """Cycle through view modes"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement view mode cycling
-            logging.info("View mode cycle requested via button")
+
     
-    def _action_confirm_action(self):
-        """Confirm current action"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement action confirmation
-            logging.info("Action confirmation requested via button")
+
     
-    def _action_undo_action(self):
-        """Undo last action"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement action undo
-            logging.info("Action undo requested via button")
+
     
     def _action_clear_detections(self):
         """Clear all detections"""
@@ -691,33 +629,13 @@ class ButtonHandler:
             # TODO: Implement detections clear
             logging.info("Detections clear requested via button")
     
-    def _action_insert_marker(self):
-        """Insert frame marker"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement frame marker insertion
-            logging.info("Frame marker insertion requested via button")
+
     
-    def _action_go_to_start(self):
-        """Go to video start"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement go to start
-            logging.info("Go to start requested via button")
+
     
-    def _action_go_to_end(self):
-        """Go to video end"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            # TODO: Implement go to end
-            logging.info("Go to end requested via button")
+
     
-    def _action_emergency_stop(self):
-        """Emergency stop"""
-        app_instance = getattr(self, '_current_app_instance', None)
-        if app_instance:
-            logging.warning("Emergency stop requested via button")
-            # Signal emergency stop through app instance
+
     
     def stop(self):
         """Stop the button handler and clean up resources"""

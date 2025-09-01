@@ -625,6 +625,10 @@ class VideoInferenceApp:
                 self.count_handler.increment_key_press()
                 logging.debug(f"User key press detected: {chr(key) if key < 128 else key}")
         
+        # Trigger visual feedback for key press
+        if key != 0 and hasattr(self, 'visualizer') and self.visualizer:
+            self.visualizer.trigger_key_feedback(key)
+        
         if key == ord('q') or key == 27:  # 'q' or ESC
             return True, False
         elif key == ord('n'):  # Next video
