@@ -149,8 +149,6 @@ class MultiAppManager:
             'next_video_request_count': 0,
             'last_next_video_time': 0
             }
-
-            #app.signal_next_video()
             
             logging.info(f"Application {app_id} initialized: {len(video_files)} video files found")
             return True
@@ -174,6 +172,15 @@ class MultiAppManager:
             # Initialize video captures for all apps
             for app_id, app in self.apps.items():
                 self._initialize_app_video(app_id, app)
+            
+            # Automatically call next video action once for all apps after initialization
+            logging.info("Automatically advancing to next video for all apps after initialization...")
+            for app_id in self.apps.keys():
+                try:
+                    self.signal_next_video(app_id)
+                    logging.info(f"Advanced to next video for app: {app_id}")
+                except Exception as e:
+                    logging.warning(f"Failed to advance video for app {app_id}: {e}")
             
             # Main processing loop
             while self.is_running and not self.shutdown_event:
