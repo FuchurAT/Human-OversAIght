@@ -642,9 +642,9 @@ setup_conda() {
     return 0
 }
 
-# Function to clean up OBS lock files and state
+# Function to clean up OBS lock files and state (preserving configuration)
 cleanup_obs_state() {
-    log_message "Cleaning up OBS state files to prevent unclean shutdown messages..."
+    log_message "Cleaning up OBS lock files only (preserving configuration)..."
     
     # Common OBS state directories
     local obs_dirs=(
@@ -653,40 +653,50 @@ cleanup_obs_state() {
         "$HOME/.cache/obs-studio"
     )
     
-    # Files that might cause unclean shutdown messages
+    # Only remove lock files and temporary files, NOT configuration files
     local cleanup_files=(
-        "global.ini"
-        "basic/profiles/Untitled/basic.ini"
-        "basic/profiles/Untitled/profanity_filter.txt"
-        "basic/profiles/Untitled/service.json"
-        "basic/profiles/Untitled/streamEncoder.json"
-        "basic/profiles/Untitled/recordEncoder.json"
-        "basic/profiles/Untitled/outputs.json"
-        "basic/profiles/Untitled/audio.json"
-        "basic/profiles/Untitled/video.json"
-        "basic/profiles/Untitled/hotkeys.json"
-        "basic/profiles/Untitled/advanced.json"
-        "basic/profiles/Untitled/recordEncoder.json"
-        "basic/profiles/Untitled/streamEncoder.json"
-        "basic/profiles/Untitled/outputs.json"
-        "basic/profiles/Untitled/audio.json"
-        "basic/profiles/Untitled/video.json"
-        "basic/profiles/Untitled/hotkeys.json"
-        "basic/profiles/Untitled/advanced.json"
+        # Lock files that might cause unclean shutdown messages
+        "basic/profiles/Untitled/lock"
+        "basic/scenes/lock"
+        "basic/sources/lock"
+        "basic/transitions/lock"
+        "basic/filters/lock"
+        "basic/encoders/lock"
+        "basic/outputs/lock"
+        "basic/audio/lock"
+        "basic/video/lock"
+        "basic/hotkeys/lock"
+        "basic/advanced/lock"
+        
+        # Temporary files
+        "basic/profiles/Untitled/temp_*"
+        "basic/scenes/temp_*"
+        "basic/sources/temp_*"
+        
+        # Cache files that might be corrupted
+        "cache/*.tmp"
+        "cache/*.lock"
     )
     
     for dir in "${obs_dirs[@]}"; do
         if [ -d "$dir" ]; then
             log_message "Checking directory: $dir"
             for file in "${cleanup_files[@]}"; do
-                local full_path="$dir/$file"
-                if [ -f "$full_path" ]; then
-                    # Backup the file before removing
-                    if [ -f "${full_path}.backup" ]; then
-                        rm -f "${full_path}.backup"
+                # Handle wildcard patterns
+                if [[ "$file" == *"*"* ]]; then
+                    # Use find to handle wildcards
+                    find "$dir" -path "$dir/$file" -type f 2>/dev/null | while read -r full_path; do
+                        if [ -f "$full_path" ]; then
+                            log_message "Removing lock/temp file: $(basename "$full_path")"
+                            rm -f "$full_path"
+                        fi
+                    done
+                else
+                    local full_path="$dir/$file"
+                    if [ -f "$full_path" ]; then
+                        log_message "Removing lock file: $file"
+                        rm -f "$full_path"
                     fi
-                    mv "$full_path" "${full_path}.backup"
-                    log_message "Backed up and removed: $file"
                 fi
             done
         fi
@@ -706,7 +716,47 @@ cleanup_obs_state() {
         fi
     fi
     
-    log_message "OBS state cleanup completed"
+    log_message "OBS lock file cleanup completed (configuration preserved)"
+}
+
+# Function to restore any backed up OBS configuration files
+restore_obs_backups() {
+    log_message "Checking for backed up OBS configuration files to restore..."
+    
+    # Common OBS state directories
+    local obs_dirs=(
+        "$HOME/.config/obs-studio"
+        "$HOME/.var/app/com.obsproject.Studio/config/obs-studio"
+    )
+    
+    local restored_count=0
+    
+    for dir in "${obs_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            log_message "Checking for backups in: $dir"
+            
+            # Find all .backup files
+            find "$dir" -name "*.backup" -type f 2>/dev/null | while read -r backup_file; do
+                local original_file="${backup_file%.backup}"
+                
+                # Only restore if the original file doesn't exist
+                if [ ! -f "$original_file" ]; then
+                    log_message "Restoring backup: $(basename "$original_file")"
+                    mv "$backup_file" "$original_file"
+                    restored_count=$((restored_count + 1))
+                else
+                    log_message "Original file exists, removing backup: $(basename "$backup_file")"
+                    rm -f "$backup_file"
+                fi
+            done
+        fi
+    done
+    
+    if [ "$restored_count" -gt 0 ]; then
+        log_message "✓ Restored $restored_count configuration files from backups"
+    else
+        log_message "No configuration files needed restoration"
+    fi
 }
 
 # Function to verify OBS is actually running
@@ -755,32 +805,96 @@ verify_obs_running() {
     return 1
 }
 
+# Function to ensure OBS configuration is properly set up (conservative approach)
+ensure_obs_configuration() {
+    log_message "Checking OBS configuration (conservative approach)..."
+    
+    local global_config="$HOME/.config/obs-studio/global.ini"
+    
+    if [ -f "$global_config" ]; then
+        log_message "Found OBS global configuration: $global_config"
+        
+        local config_changed=false
+        
+        # Only fix FirstRun if it's explicitly set to true (don't change if already false)
+        if grep -q "^FirstRun=true$" "$global_config"; then
+            log_message "Fixing FirstRun setting (was true, setting to false)..."
+            sed -i 's/^FirstRun=true$/FirstRun=false/' "$global_config"
+            log_message "✓ Set FirstRun to false"
+            config_changed=true
+        else
+            log_message "FirstRun setting is already correct"
+        fi
+        
+        # Only fix ConfigOnNewProfile if it's explicitly set to true (don't change if already false)
+        if grep -q "^ConfigOnNewProfile=true$" "$global_config"; then
+            log_message "Fixing ConfigOnNewProfile setting (was true, setting to false)..."
+            sed -i 's/^ConfigOnNewProfile=true$/ConfigOnNewProfile=false/' "$global_config"
+            log_message "✓ Set ConfigOnNewProfile to false"
+            config_changed=true
+        else
+            log_message "ConfigOnNewProfile setting is already correct"
+        fi
+        
+        # Only change SceneCollection if it's not already set to theopsroom
+        if ! grep -q "^SceneCollection=theopsroom$" "$global_config"; then
+            local current_scene=$(grep "^SceneCollection=" "$global_config" | cut -d'=' -f2)
+            if [ -n "$current_scene" ]; then
+                log_message "Current SceneCollection is '$current_scene', changing to 'theopsroom'..."
+                sed -i 's/^SceneCollection=.*/SceneCollection=theopsroom/' "$global_config"
+                sed -i 's/^SceneCollectionFile=.*/SceneCollectionFile=theopsroom/' "$global_config"
+                log_message "✓ Set SceneCollection to theopsroom"
+                config_changed=true
+            else
+                log_message "No SceneCollection found, adding theopsroom..."
+                echo "SceneCollection=theopsroom" >> "$global_config"
+                echo "SceneCollectionFile=theopsroom" >> "$global_config"
+                log_message "✓ Added SceneCollection theopsroom"
+                config_changed=true
+            fi
+        else
+            log_message "SceneCollection is already set to theopsroom"
+        fi
+        
+        if [ "$config_changed" = true ]; then
+            log_message "OBS configuration was updated"
+        else
+            log_message "OBS configuration is already correct, no changes needed"
+        fi
+        
+        return 0
+    else
+        log_message "WARNING: OBS global configuration not found"
+        return 1
+    fi
+}
+
 # Function to check and create OBS scene collection if needed
 check_obs_scene_collection() {
-    log_message "Checking OBS scene collection 'opsroom1'..."
+    log_message "Checking OBS scene collection 'theopsroom'..."
     
     local obs_config_dir="$HOME/.var/app/com.obsproject.Studio/config/obs-studio"
     local profiles_dir="$obs_config_dir/basic/profiles"
-    local target_profile="$profiles_dir/opsroom1"
+    local target_profile="$profiles_dir/theopsroom"
     
     if [ -d "$target_profile" ]; then
-        log_message "✓ Scene collection 'opsroom1' already exists"
+        log_message "✓ Scene collection 'theopsroom' already exists"
         return 0
     fi
     
-    log_message "Scene collection 'opsroom1' not found, checking for existing profiles..."
+    log_message "Scene collection 'theopsroom' not found, checking for existing profiles..."
     
     # Check if there are any existing profiles
     if [ -d "$profiles_dir" ]; then
         local existing_profiles=$(ls -1 "$profiles_dir" 2>/dev/null | head -1)
         if [ -n "$existing_profiles" ]; then
             log_message "Found existing profile: $existing_profiles"
-            log_message "Copying existing profile to create 'opsroom1'..."
+            log_message "Copying existing profile to create 'theopsroom'..."
             
-            # Copy the first existing profile to create opsroom1
+            # Copy the first existing profile to create theopsroom
             cp -r "$profiles_dir/$existing_profiles" "$target_profile" 2>/dev/null
             if [ $? -eq 0 ]; then
-                log_message "✓ Successfully created 'opsroom1' scene collection from existing profile"
+                log_message "✓ Successfully created 'theopsroom' scene collection from existing profile"
                 return 0
             else
                 log_message "✗ Failed to copy existing profile"
@@ -848,21 +962,21 @@ debug_obs_startup() {
         log_message "  No OBS scenes directory found"
     fi
     
-    # Check for specific scene collection "opsroom-1"
-    log_message "Checking for scene collection 'opsroom-1':"
+    # Check for specific scene collection "theopsroom"
+    log_message "Checking for scene collection 'theopsroom':"
     local obs_config_dir=""
     
     # Check Flatpak location first
-    if [ -d "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/basic/profiles/opsroom-1" ]; then
+    if [ -d "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/basic/profiles/theopsroom" ]; then
         obs_config_dir="$HOME/.var/app/com.obsproject.Studio/config/obs-studio"
-        log_message "  ✓ Scene collection 'opsroom-1' exists in Flatpak location"
-        ls -la "$obs_config_dir/basic/profiles/opsroom-1/" 2>/dev/null | tee -a "$LOG_FILE"
-    elif [ -d "$HOME/.config/obs-studio/basic/profiles/opsroom-1" ]; then
+        log_message "  ✓ Scene collection 'theopsroom' exists in Flatpak location"
+        ls -la "$obs_config_dir/basic/profiles/theopsroom/" 2>/dev/null | tee -a "$LOG_FILE"
+    elif [ -d "$HOME/.config/obs-studio/basic/profiles/theopsroom" ]; then
         obs_config_dir="$HOME/.config/obs-studio"
-        log_message "  ✓ Scene collection 'opsroom-1' exists in standard location"
-        ls -la "$obs_config_dir/basic/profiles/opsroom-1/" 2>/dev/null | tee -a "$LOG_FILE"
+        log_message "  ✓ Scene collection 'theopsroom' exists in standard location"
+        ls -la "$obs_config_dir/basic/profiles/theopsroom/" 2>/dev/null | tee -a "$LOG_FILE"
     else
-        log_message "  ✗ Scene collection 'opsroom-1' not found"
+        log_message "  ✗ Scene collection 'theopsroom' not found"
         log_message "  Available profiles:"
         if [ -d "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/basic/profiles" ]; then
             log_message "  Flatpak profiles:"
@@ -898,7 +1012,7 @@ debug_obs_startup() {
 
 # Function to start OBS Studio with specific scene collection
 start_obs() {
-    log_message "Starting OBS Studio with scene collection: opsroom1..."
+    log_message "Starting OBS Studio with scene collection: theopsroom..."
     
     # Run OBS startup debugging
     debug_obs_startup
@@ -910,8 +1024,14 @@ start_obs() {
         use_scene_collection=false
     fi
     
+    # Restore any backed up configuration files first
+    restore_obs_backups
+    
     # Clean up any existing OBS state first
     cleanup_obs_state
+    
+    # Ensure OBS configuration is properly set up
+    ensure_obs_configuration
     
     # Log current monitor setup for OBS
     log_message "Current monitor setup for OBS:"
@@ -1005,8 +1125,8 @@ start_obs() {
         return 0
     fi
     
-    # Start OBS with the opsroom-1 scene collection
-    log_message "Starting OBS Studio with scene collection: opsroom-1"
+    # Start OBS with the theopsroom scene collection
+    log_message "Starting OBS Studio with scene collection: theopsroom"
 
     # Set graphics options for NVIDIA GPUs
     export __GL_SYNC_TO_VBLANK=0
@@ -1019,7 +1139,7 @@ start_obs() {
     log_message "Attempting to start OBS with NVIDIA backend and force start flags..."
     if [ -n "$OBS_PATH" ]; then
         if [ "$use_scene_collection" = true ]; then
-            $OBS_PATH --collection "opsroom1" --gl-backend nvidia --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
+            $OBS_PATH --collection "theopsroom" --gl-backend nvidia --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
         else
             $OBS_PATH --gl-backend nvidia --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
         fi
@@ -1051,7 +1171,7 @@ start_obs() {
     if [ "$obs_started" = false ] && [ -n "$OBS_PATH" ]; then
         log_message "Starting OBS with X11 backend fallback and force start flags..."
         if [ "$use_scene_collection" = true ]; then
-            $OBS_PATH --collection "opsroom1" --gl-backend x11 --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
+            $OBS_PATH --collection "theopsroom" --gl-backend x11 --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
         else
             $OBS_PATH --gl-backend x11 --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
         fi
@@ -1083,7 +1203,7 @@ start_obs() {
     if [ "$obs_started" = false ] && [ -n "$OBS_PATH" ]; then
         log_message "Starting OBS with minimal startup flags (no backend specification)..."
         if [ "$use_scene_collection" = true ]; then
-            $OBS_PATH --collection "opsroom1" &
+            $OBS_PATH --collection "theopsroom" &
         else
             $OBS_PATH &
         fi
@@ -1468,11 +1588,11 @@ main() {
         exit 1
     fi
     
-    # Start OBS Studio with opsroom-1 scene collection
+    # Start OBS Studio with theopsroom scene collection
     if ! start_obs; then
         log_message "WARNING: Failed to start OBS Studio, continuing without OBS"
     else
-        log_message "OBS Studio started successfully with opsroom-1 scene collection"
+        log_message "OBS Studio started successfully with theopsroom scene collection"
         
         # Position the preview projector on screen 3
         log_message "Waiting for OBS to initialize before positioning preview projector..."

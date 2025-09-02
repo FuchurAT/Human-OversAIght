@@ -33,13 +33,38 @@ def get_devices(capture_devices: bool = False) -> Tuple[str, ...]:
         pygame.mixer.quit()
     return devices
 
+def find_device_by_name(devices: Tuple[str, ...], target_name: str) -> str:
+    """Find a device by name, with fallback to first available device"""
+    print(f"Looking for device containing: '{target_name}'")
+    print(f"Available devices: {devices}")
+    
+    # First try exact match
+    for i, device in enumerate(devices):
+        if target_name.lower() == device.lower():
+            print(f"Found exact match at index {i}: {device}")
+            return device
+    
+    # Then try partial match
+    for i, device in enumerate(devices):
+        if target_name.lower() in device.lower():
+            print(f"Found partial match at index {i}: {device}")
+            return device
+    
+    # Fallback to first available device
+    if devices:
+        print(f"No match found, using first available device: {devices[0]}")
+        return devices[0]
+    else:
+        raise RuntimeError("No audio devices available!")
+
 devices = get_devices()
 
 if not devices:
     raise RuntimeError("No device!")
-device = devices[2] #change back to device[1]
 
-print(devices)
+# Look for Rockster GO 2, USB Audio device
+device = find_device_by_name(devices, "Rockster GO 2, USB Audio")
+
 print(f"Selected audio device: {device}")
 
 class DetectionVisualizer:
