@@ -339,7 +339,11 @@ class ButtonHandler:
                         # Temporarily set the app instance for the callback
                         old_app_instance = getattr(self, '_current_app_instance', None)
                         self._current_app_instance = app_instance
+                        print(f"Button action: {action_name}")
                         
+                        if self.config['enable_sound_feedback']:
+                            self._play_button_sound()
+
                         # Trigger visual feedback for button press
                         if hasattr(app_instance, 'visualizer') and app_instance.visualizer:
                             # Calculate feedback position (center of the application window)
@@ -352,9 +356,7 @@ class ButtonHandler:
                         
                         # Restore previous app instance
                         self._current_app_instance = old_app_instance
-                        
-                        if self.config['enable_sound_feedback']:
-                            self._play_button_sound()
+
                         if self.config['enable_visual_feedback']:
                             self._show_button_feedback(button_id)
                         

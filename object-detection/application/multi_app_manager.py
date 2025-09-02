@@ -33,7 +33,7 @@ class MultiAppManager:
         # Signal handling
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
-
+        
         logging.info("MultiAppManager initialized")
     
     def _signal_handler(self, signum: int, frame):
@@ -149,6 +149,8 @@ class MultiAppManager:
             'next_video_request_count': 0,
             'last_next_video_time': 0
             }
+
+            #app.signal_next_video()
             
             logging.info(f"Application {app_id} initialized: {len(video_files)} video files found")
             return True
@@ -279,8 +281,7 @@ class MultiAppManager:
             # Setup window
             window_name = state['window_name']
             app._setup_fullscreen_window(window_name)
-            app.signal_next_video()
-
+            
             # Store capture
             state['cap'] = cap
             state['fps'] = fps

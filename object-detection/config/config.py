@@ -444,7 +444,7 @@ BUTTON_ACTIONS = {
 
 # Counter Display Configuration
 COUNTER_CONFIG = {
-    'enabled': True,
+    'enabled': False,
     'position': 'top_left',  # 'top_left', 'top_right', 'bottom_left', 'bottom_right'
     'font_scale': 1.0,
     'font_thickness': 2,
