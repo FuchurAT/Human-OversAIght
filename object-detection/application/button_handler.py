@@ -327,6 +327,7 @@ class ButtonHandler:
             if COUNTER_CONFIG.get('enabled', True):
                 # Find the first app instance with a count handler to increment the global counter
                 for app_instance in target_apps:
+                    #print(COUNTER_CONFIG.get('enabled', True), app_instance.counter_handler)
                     if hasattr(app_instance, 'count_handler') and app_instance.count_handler:
                         app_instance.count_handler.increment_button_press()
                         break  # Only increment once per button press

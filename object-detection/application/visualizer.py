@@ -16,9 +16,9 @@ from config.config import (
     DEFAULT_ANIMATION_ALPHA, DEFAULT_CORNER_LENGTH, DEFAULT_EDGE_MID_LENGTH,
     DEFAULT_GLOW_THICKNESS, DEFAULT_GLOW_ALPHA, DEFAULT_CROSS_LENGTH,
     DEFAULT_CROSS_THICKNESS, DEFAULT_PIXEL_SIZE_DIVISOR, MIN_PIXEL_SIZE,
-    FPS_UPDATE_INTERVAL, FPS_Y_OFFSET, FPS_LINE_SPACING
+    FPS_UPDATE_INTERVAL, FPS_Y_OFFSET, FPS_LINE_SPACING, ENABLE_AMBIENT_SOUNDS
 )
-
+import logging
 from application.models import Detection, DisplayConfig
 from application.color_manager import ColorManager
 from application.feedback_overlay import FeedbackOverlay
@@ -27,7 +27,12 @@ from application.feedback_overlay import FeedbackOverlay
 def get_devices(capture_devices: bool = False) -> Tuple[str, ...]:
     init_by_me = not pygame.mixer.get_init()
     if init_by_me:
-        pygame.mixer.init()
+        try:
+            pygame.mixer.init()
+        except Exception as e:
+            print(f"Error initializing pygame mixer: {e}")
+            return tuple()
+        
     devices = tuple(sdl2_audio.get_audio_device_names(capture_devices))
     if init_by_me:
         pygame.mixer.quit()
@@ -55,12 +60,12 @@ def find_device_by_name(devices: Tuple[str, ...], target_name: str) -> str:
         print(f"No match found, using first available device: {devices[0]}")
         return devices[0]
     else:
-        raise RuntimeError("No audio devices available!")
+        logging.error("No audio devices available!")
 
 devices = get_devices()
 
 if not devices:
-    raise RuntimeError("No device!")
+    logging.error("No device!")
 
 # Look for Rockster GO 2, USB Audio device
 device = find_device_by_name(devices, "Rockster GO 2, USB Audio")
@@ -248,7 +253,7 @@ class DetectionVisualizer:
             print(f"Ambient sounds loaded: {list(self.ambient_sounds.keys())}")
             
             # Automatically start playing the first available ambient sound
-            if self.ambient_sounds:
+            if self.ambient_sounds and ENABLE_AMBIENT_SOUNDS:
                 self.ambient_sound_index = 0
                 first_sound = list(self.ambient_sounds.keys())[0]
                 print(f"Starting first ambient sound: {first_sound}")
@@ -851,21 +856,30 @@ class DetectionVisualizer:
         """Draw random glitch effects on the frame"""
         h, w = frame.shape[:2]
         
-        # Use frame index to animate the glitch from left to right
-        glitch_width = min(w, (self.frame_idx % 60) * (w // 60))  # Animate over 60 frames
+        # Calculate glitch width based on frame index (0-59 cycle)
+        cycle_frame = self.frame_idx % 60
+        
+        # Make glitch appear more frequently - every 30 frames instead of 60
+        if cycle_frame < 30:
+            glitch_width = min(w, int(cycle_frame * w / 30))  # Animate over 30 frames
+        else:
+            glitch_width = 0  # Hide for the second half of the cycle
         
         if glitch_width > 0:
-            # Fixed vertical position for consistent glitch line
-            y = h // 3  # Fixed position at 1/3 of screen height
+            # Add some randomness to the vertical position for more dynamic glitches
+            base_y = h // 3  # Base position at 1/3 of screen height
+            y_variation = np.random.randint(-20, 21)  # Add some vertical variation
+            y = max(10, min(h - 10, base_y + y_variation))  # Keep within bounds
             
             points = []
             for x in range(0, glitch_width, 1):
-                offset = np.random.randint(-3, 4)
+                offset = np.random.randint(-5, 6)
                 points.append((x, min(max(y + offset, 0), h - 1)))
             
             # Draw lines from left to right, connecting consecutive points
             for i in range(len(points) - 1):
-                cv2.line(frame, points[i], points[i + 1], (0, 0, 0), 1)
+                # Use a more visible color for the glitch (red)
+                cv2.line(frame, points[i], points[i + 1], (0, 0, 255), 2)
     
     def draw_legend(self, frame: np.ndarray, legend_dict: Dict[int, Tuple[float, Tuple[int, int, int]]], 
                     center: bool = False, font_scale: float = 0.7, line_height: int = 25, 

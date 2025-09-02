@@ -4,9 +4,14 @@ Contains all constants, default values, and configuration settings.
 """
 
 # Application Constants
+from numpy import False_
+
+
 ENABLE_UNMASK = True
 ENABLE_GRAD_CAM_VIEW = True
 ENABLE_COUNTER_DISPLAY = True
+
+ENABLE_AMBIENT_SOUNDS = False
 
 # Multi-Application Configuration
 # Each application can have its own configuration including screen, video folders, and model
@@ -16,7 +21,6 @@ APPLICATIONS = {
         'screen_id': 0,  # Primary monitor (0), secondary (1), etc.
         'video_folders': [
             '/home/theopsroom/Documents/NEW',
-            '/home/theopsroom/Human-OversAIght/data/videos/horizontal'
         ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
@@ -77,6 +81,25 @@ APPLICATIONS = {
         ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 04',
+        'enabled': True,  # Disabled by default
+        'ndi': {
+            'enabled': False,
+            'source_name': 'Human-OversAIght-App04',
+            'group_name': 'Detection-Apps',
+            'video_format': 'BGRX',
+            'frame_rate': 30,
+            'video_width': 1920,
+            'video_height': 1080
+        }
+    },
+    'app_05': {
+        'name': 'Application 05',
+        'screen_id': 0,  # Same screen as app_01 but different position
+        'video_folders': [
+            '/home/theopsroom/Documents/NEW-R'
+        ],
+        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'window_title': 'Object Detection - App 05',
         'enabled': True,  # Disabled by default
         'ndi': {
             'enabled': False,
@@ -193,10 +216,10 @@ DEFAULT_VIDEO_PATH = "/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS"
 # Extended to support multiple applications with app_id parameter
 BUTTON_MAPPING = {
     0: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
-    1: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02,app_03'},
+    1: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'app_02,app_03'},
     2: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     3: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
-    4: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
+    4: {'key': 'space', 'action': 'next_video', 'app_id': 'all'},
     5: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     6: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
     7: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
@@ -214,31 +237,31 @@ BUTTON_MAPPING = {
     19: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
     20: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     21: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
-    22: {'key': 'f', 'action': 'next_folder', 'app_id': 'all'},
+    22: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
     23: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     24: {'key': 'space', 'action': 'next_video', 'app_id': 'app_01'},
-    25: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    25: {'key': 'space', 'action': 'next_video', 'app_id': 'app_01'},
     26: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     27: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
-    28: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    28: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
     29: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     30: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
-    31: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    31: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
     32: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     33: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
     34: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
     35: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     36: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
-    37: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    37: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
     38: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     39: {'key': 'space', 'action': 'next_video', 'app_id': 'app_01'},
-    40: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    40: {'key': 'space', 'action': 'next_video', 'app_id': 'app_01'},
     41: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     42: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
-    43: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    43: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
     44: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
     45: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
-    46: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    46: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
     47: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
 }
 
@@ -421,7 +444,7 @@ BUTTON_ACTIONS = {
 
 # Counter Display Configuration
 COUNTER_CONFIG = {
-    'enabled': False,
+    'enabled': True,
     'position': 'top_left',  # 'top_left', 'top_right', 'bottom_left', 'bottom_right'
     'font_scale': 1.0,
     'font_thickness': 2,
