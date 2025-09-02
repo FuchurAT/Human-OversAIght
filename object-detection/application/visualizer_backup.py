@@ -512,7 +512,7 @@ class DetectionVisualizer:
             'all_sounds': sound_names
         }
     
-    def play_button_sound(self, sound_name: str = None, volume: float = 1.0) -> bool:
+    def play_button_sound(self, sound_name: str = None, volume: float = 1) -> bool:
         """Play a button sound effect"""
         if not self.audio_available or not self.button_sounds:
             return False
