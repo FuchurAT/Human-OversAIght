@@ -135,7 +135,9 @@ class MultiAppManager:
             self.apps[app_id] = app
             self.app_states[app_id] = {
                 'current_video_index': 0,
+                'current_folder_index': 0,  # Track which folder we're in
                 'video_files': video_files,
+                'video_folders': video_folders,  # Store the list of folders
                 'cap': None,
                 'out_writer': None,
                 'frame_count': 0,
@@ -242,21 +244,30 @@ class MultiAppManager:
         try:
             state = self.app_states[app_id]
             video_files = state['video_files']
+            video_folders = state['video_folders']
+            current_folder_index = state['current_folder_index']
             
             if state['current_video_index'] >= len(video_files):
                 logging.info(f"App {app_id}: All videos processed")
                 state['is_active'] = False
                 return
             
-            video_file = video_files[state['current_video_index']]
-            video_path = Path(app.video_path) / video_file
+            # Get the current folder path
+            if current_folder_index >= len(video_folders):
+                logging.error(f"App {app_id}: Invalid folder index {current_folder_index}")
+                state['is_active'] = False
+                return
             
-            logging.info(f"App {app_id}: Initializing video {video_file}")
+            current_folder = Path(video_folders[current_folder_index])
+            video_file = video_files[state['current_video_index']]
+            video_path = current_folder / video_file
+            
+            logging.info(f"App {app_id}: Initializing video {video_file} from folder {current_folder}")
             
             # Open video capture
             cap = cv2.VideoCapture(str(video_path))
             if not cap.isOpened():
-                logging.error(f"App {app_id}: Could not open video {video_file}")
+                logging.error(f"App {app_id}: Could not open video {video_path}")
                 state['is_active'] = False
                 return
             
@@ -399,13 +410,35 @@ class MultiAppManager:
             state['fullscreen_size'] = None
             state['next_video_requested'] = False  # Reset the flag
             
-            if state['current_video_index'] < len(state['video_files']):
-                # Initialize next video
-                self._initialize_app_video(app_id, app)
+            # Check if we need to move to the next folder
+            if state['current_video_index'] >= len(state['video_files']):
+                # Move to next folder
+                state['current_folder_index'] += 1
+                state['current_video_index'] = 0  # Reset video index for new folder
+                
+                if state['current_folder_index'] < len(state['video_folders']):
+                    # Initialize videos for the new folder
+                    new_folder = Path(state['video_folders'][state['current_folder_index']])
+                    logging.info(f"App {app_id}: Moving to next folder: {new_folder}")
+                    
+                    # Get video files from the new folder
+                    new_video_files = [f for f in new_folder.iterdir() if f.suffix.lower() == '.mp4']
+                    if new_video_files:
+                        state['video_files'] = new_video_files
+                        logging.info(f"App {app_id}: Found {len(new_video_files)} videos in new folder")
+                        # Initialize the first video in the new folder
+                        self._initialize_app_video(app_id, app)
+                    else:
+                        logging.warning(f"App {app_id}: No videos found in folder {new_folder}")
+                        # Try the next folder
+                        self._next_video_or_finish(app_id)
+                else:
+                    # All folders processed
+                    logging.info(f"App {app_id}: All folders completed")
+                    state['is_active'] = False
             else:
-                # All videos processed
-                logging.info(f"App {app_id}: All videos completed")
-                state['is_active'] = False
+                # Initialize next video in current folder
+                self._initialize_app_video(app_id, app)
                 
         except Exception as e:
             logging.error(f"Error moving to next video for app {app_id}: {e}")
@@ -444,13 +477,60 @@ class MultiAppManager:
             # Use thread-safe approach with lock
             with self._state_lock:
                 if app_id in self.app_states:
-                    # Signal next folder through the app instance
-                    app = self.apps.get(app_id)
-                    if app and hasattr(app, 'signal_next_folder'):
-                        app.signal_next_folder()
-                        logging.debug(f"Next folder signal sent to app {app_id}")
+                    state = self.app_states[app_id]
+                    
+                    # Clean up current video
+                    if state['cap']:
+                        state['cap'].release()
+                        state['cap'] = None
+                    
+                    if state['out_writer']:
+                        state['out_writer'].release()
+                        state['out_writer'] = None
+                    
+                    # Move to next folder
+                    state['current_folder_index'] += 1
+                    state['current_video_index'] = 0  # Reset video index for new folder
+                    state['frame_count'] = 0
+                    state['first_frame'] = True
+                    state['fullscreen_size'] = None
+                    
+                    if state['current_folder_index'] < len(state['video_folders']):
+                        # Initialize videos for the new folder
+                        new_folder = Path(state['video_folders'][state['current_folder_index']])
+                        logging.info(f"App {app_id}: Switching to folder: {new_folder}")
+                        
+                        # Get video files from the new folder
+                        new_video_files = [f for f in new_folder.iterdir() if f.suffix.lower() == '.mp4']
+                        if new_video_files:
+                            state['video_files'] = new_video_files
+                            logging.info(f"App {app_id}: Found {len(new_video_files)} videos in new folder")
+                            # Initialize the first video in the new folder
+                            app = self.apps[app_id]
+                            self._initialize_app_video(app_id, app)
+                        else:
+                            logging.warning(f"App {app_id}: No videos found in folder {new_folder}")
+                            # Try the next folder recursively
+                            return self.signal_next_folder(app_id)
                     else:
-                        logging.warning(f"App {app_id} does not support folder switching")
+                        # All folders processed, loop back to first folder
+                        state['current_folder_index'] = 0
+                        first_folder = Path(state['video_folders'][0])
+                        logging.info(f"App {app_id}: Looping back to first folder: {first_folder}")
+                        
+                        # Get video files from the first folder
+                        first_video_files = [f for f in first_folder.iterdir() if f.suffix.lower() == '.mp4']
+                        if first_video_files:
+                            state['video_files'] = first_video_files
+                            logging.info(f"App {app_id}: Found {len(first_video_files)} videos in first folder")
+                            # Initialize the first video in the first folder
+                            app = self.apps[app_id]
+                            self._initialize_app_video(app_id, app)
+                        else:
+                            logging.error(f"App {app_id}: No videos found in first folder")
+                            state['is_active'] = False
+                    
+                    logging.debug(f"Next folder signal processed for app {app_id}")
             return True
         except Exception as e:
             logging.error(f"Error signaling next folder for app {app_id}: {e}")

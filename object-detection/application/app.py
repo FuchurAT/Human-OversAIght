@@ -276,9 +276,6 @@ class VideoInferenceApp:
         old_index = self.current_folder_index
         old_video_files = self.refresh_video_files() if os.path.exists(old_folder) else []
         
-        logging.info(f"Switching from folder {old_index + 1}/{len(self.video_folders)}: {old_folder}")
-        logging.info(f"Old folder had {len(old_video_files)} video files")
-        
         # Find next valid folder
         attempts = 0
         max_attempts = len(self.video_folders)
@@ -886,7 +883,8 @@ class VideoInferenceApp:
         
         # Trigger visual feedback for key press
         if key != 0 and hasattr(self, 'visualizer') and self.visualizer:
-            self.visualizer.trigger_key_feedback(key)
+            if (key in [ord('n'), ord('b'), ord('l'), ord('d'), 27] and  key < 256):# ESC
+                self.visualizer.trigger_key_feedback(key)
         
         if key == ord('q') or key == 27:  # 'q' or ESC
             return True, False
@@ -1382,6 +1380,10 @@ class VideoInferenceApp:
                         # Ensure ambient sounds are playing and check for cycling
                         self.visualizer.ensure_ambient_playing()
                         self.visualizer.check_ambient_cycle_timer()
+                        
+                        # Maintain button sounds periodically (every 100 frames)
+                        if self.visualizer.frame_idx % 100 == 0:
+                            self.visualizer.maintain_button_sounds()
                         
                         # Write to output video
                         if out_writer:

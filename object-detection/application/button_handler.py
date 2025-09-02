@@ -135,7 +135,13 @@ class ButtonHandler:
         return self.app_instances.copy()
     
     def _get_target_apps(self, button_id: int) -> list:
-        """Get target applications for a button press based on app_id in button mapping"""
+        """Get target applications for a button press based on app_id in button mapping
+        
+        Supports three formats:
+        - 'all': affects all applications
+        - 'app_01': affects specific application
+        - 'app_01,app_02': affects multiple specific applications
+        """
         if button_id not in BUTTON_MAPPING:
             return []
         
@@ -145,6 +151,16 @@ class ButtonHandler:
         if app_id == 'all':
             # Return all enabled applications
             return list(self.app_instances.values())
+        elif ',' in app_id:
+            # Handle comma-separated list of app IDs
+            app_ids = [aid.strip() for aid in app_id.split(',')]
+            target_apps = []
+            for aid in app_ids:
+                if aid in self.app_instances:
+                    target_apps.append(self.app_instances[aid])
+                else:
+                    logging.warning(f"Application '{aid}' not found for button {button_id}")
+            return target_apps
         elif app_id in self.app_instances:
             # Return specific application
             return [self.app_instances[app_id]]
@@ -337,7 +353,7 @@ class ButtonHandler:
                         self._current_app_instance = old_app_instance
                         
                         if self.config['enable_sound_feedback']:
-                            self._play_button_sound(button_id)
+                            self._play_button_sound()
                         if self.config['enable_visual_feedback']:
                             self._show_button_feedback(button_id)
                         
@@ -355,10 +371,18 @@ class ButtonHandler:
         else:
             logging.debug(f"Button {button_id} pressed but not mapped to any action")
     
-    def _play_button_sound(self, button_id: int):
+    def _play_button_sound(self):
         """Play sound feedback for button press"""
-        # TODO: Implement sound feedback
-        pass
+        app_instance = getattr(self, '_current_app_instance', None)
+        if app_instance and hasattr(app_instance, 'visualizer') and app_instance.visualizer:
+            try:
+                # Use the visualizer's button sound functionality
+                app_instance.visualizer.play_button_sound()
+                logging.debug("Button sound played via visualizer")
+            except Exception as e:
+                logging.warning(f"Failed to play button sound: {e}")
+        else:
+            logging.debug("No visualizer available for button sound")
     
     def _show_button_feedback(self, button_id: int):
         """Show visual feedback for button press"""
@@ -441,17 +465,17 @@ class ButtonHandler:
                 logging.warning("App instance does not have signal_next_video method")
         
         # For multi-app mode, signal through the manager if available
-        for app_id, app in self.app_instances.items():
+        # Use the current app instance's app_id instead of looping through all apps
+        if app_instance and hasattr(app_instance, '_multi_app_manager'):
             try:
-                if hasattr(app, '_multi_app_manager'):
-                    manager = app._multi_app_manager
-                    if hasattr(manager, 'signal_next_video'):
-                        manager.signal_next_video(app_id)
-                        logging.info(f"Next video signal sent to multi-app manager for app {app_id}")
-                        break
+                manager = app_instance._multi_app_manager
+                if hasattr(manager, 'signal_next_video'):
+                    app_id = getattr(app_instance, 'app_id', 'unknown')
+                    print(f"Switch to next video for {app_id}")
+                    manager.signal_next_video(app_id)
+                    logging.info(f"Next video signal sent to multi-app manager for app {app_id}")
             except Exception as e:
-                logging.warning(f"Error signaling next video for app {app_id}: {e}")
-                continue
+                logging.warning(f"Error signaling next video for app {getattr(app_instance, 'app_id', 'unknown')}: {e}")
     
     def _action_next_folder(self):
         """Move to next folder"""
@@ -469,17 +493,16 @@ class ButtonHandler:
                 logging.warning("App instance does not have signal_next_folder method")
         
         # For multi-app mode, signal through the manager if available
-        for app_id, app in self.app_instances.items():
+        # Use the current app instance's app_id instead of looping through all apps
+        if app_instance and hasattr(app_instance, '_multi_app_manager'):
             try:
-                if hasattr(app, '_multi_app_manager'):
-                    manager = app._multi_app_manager
-                    if hasattr(manager, 'signal_next_folder'):
-                        manager.signal_next_folder(app_id)
-                        logging.info(f"Next folder signal sent to multi-app manager for app {app_id}")
-                        break
+                manager = app_instance._multi_app_manager
+                if hasattr(manager, 'signal_next_folder'):
+                    app_id = getattr(app_instance, 'app_id', 'unknown')
+                    manager.signal_next_folder(app_id)
+                    logging.info(f"Next folder signal sent to multi-app manager for app {app_id}")
             except Exception as e:
-                logging.warning(f"Error signaling next folder for app {app_id}: {e}")
-                continue
+                logging.warning(f"Error signaling next folder for app {getattr(app_instance, 'app_id', 'unknown')}: {e}")
     
     def _action_previous_video(self):
         """Move to previous video"""

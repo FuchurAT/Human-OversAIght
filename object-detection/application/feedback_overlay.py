@@ -7,8 +7,9 @@ import cv2
 import numpy as np
 import time
 import logging
+import random
 from typing import Tuple, List, Dict
-from config.config import FEEDBACK_CONFIG, ACTION_FEEDBACK_COLORS, KEY_FEEDBACK_COLORS
+from config.config import FEEDBACK_CONFIG, ACTION_FEEDBACK_COLORS, KEY_FEEDBACK_COLORS, DEFAULT_CROSS_LENGTH, DEFAULT_CROSS_THICKNESS
 
 
 class FeedbackOverlay:
@@ -20,10 +21,14 @@ class FeedbackOverlay:
         self.action_colors = ACTION_FEEDBACK_COLORS.copy()
         self.key_colors = KEY_FEEDBACK_COLORS.copy()
         self.debug_counter = 0
+        
+        # Add cross configuration
+        self.cross_length = DEFAULT_CROSS_LENGTH
+        self.cross_thickness = DEFAULT_CROSS_THICKNESS
     
     def add_feedback(self, action_name: str = None, key_code: int = None, 
                     position: Tuple[int, int] = None, color: Tuple[int, int, int] = None,
-                    radius: int = None, duration: float = None):
+                    radius: int = None, duration: float = None, shape_type: str = None):
         """Add a new feedback overlay"""
         if not self.config['enabled']:
             return
@@ -60,6 +65,10 @@ class FeedbackOverlay:
             logging.warning(f"Cannot add feedback: invalid duration {duration}")
             return
         
+        # Randomly choose shape type if not specified
+        if shape_type is None:
+            shape_type = random.choice(['circle', 'cross'])
+        
         # Create feedback object
         feedback = {
             'action_name': action_name,
@@ -67,6 +76,7 @@ class FeedbackOverlay:
             'position': position,
             'color': color,
             'radius': radius,
+            'shape_type': shape_type,  # 'circle' or 'cross'
             'start_time': time.time(),
             'duration': duration,
             'fade_in_duration': self.config['fade_in_duration'],
@@ -76,24 +86,24 @@ class FeedbackOverlay:
         }
         
         self.active_feedbacks.append(feedback)
-        logging.debug(f"Added feedback: {action_name or key_code} at {position} with color {color}")
+        logging.debug(f"Added feedback: {action_name or key_code} at {position} with color {color}, shape: {shape_type}")
     
     def _calculate_position(self) -> Tuple[int, int]:
-        """Calculate feedback position based on configuration and frame dimensions"""
-        offset_x = self.config['offset_x']
-        offset_y = self.config['offset_y']
-        
-        # If frame dimensions are set, use them for better positioning
+        """Calculate random feedback position within frame bounds"""
+        # If frame dimensions are set, use them for random positioning
         if hasattr(self, 'frame_width') and hasattr(self, 'frame_height'):
-            # Ensure position is within frame bounds
-            x = max(offset_x, 0)
-            y = max(offset_y, 0)
-            x = min(x, self.frame_width - 1)
-            y = min(y, self.frame_height - 1)
+            # Generate random position within frame bounds
+            x = random.randint(0, self.frame_width - 1)
+            y = random.randint(0, self.frame_height - 1)
             return (x, y)
         
-        # Fallback to config offsets
-        return (offset_x, offset_y)
+        # Fallback to random position within reasonable bounds if frame dimensions not set
+        # Use default screen resolution as fallback
+        fallback_width = 1920
+        fallback_height = 1080
+        x = random.randint(0, fallback_width - 1)
+        y = random.randint(0, fallback_height - 1)
+        return (x, y)
     
     def update_feedbacks(self):
         """Update feedback states and remove expired ones"""
@@ -147,6 +157,7 @@ class FeedbackOverlay:
             color = feedback['color']
             radius = feedback['radius']
             alpha = feedback['current_alpha']
+            shape_type = feedback.get('shape_type', 'circle')
             
             # Ensure position is within frame bounds
             x, y = position
@@ -154,12 +165,17 @@ class FeedbackOverlay:
                 logging.warning(f"Feedback position {position} outside frame bounds {frame.shape}")
                 continue
             
-            logging.debug(f"Drawing feedback at {position} with color {color}, radius {radius}, alpha {alpha}")
+            logging.debug(f"Drawing feedback at {position} with color {color}, radius {radius}, alpha {alpha}, shape: {shape_type}")
             
-            # Draw the feedback circle
-            result_frame = self._draw_feedback_circle(
-                result_frame, position, radius, color, alpha
-            )
+            # Draw the feedback shape based on type
+            if shape_type == 'cross':
+                result_frame = self._draw_feedback_cross(
+                    result_frame, position, radius, color, alpha
+                )
+            else:  # default to circle
+                result_frame = self._draw_feedback_circle(
+                    result_frame, position, radius, color, alpha
+                )
         
         # Save debug image if requested
         if debug_save:
@@ -199,6 +215,47 @@ class FeedbackOverlay:
             
             result = frame.astype(np.float32) + overlay.astype(np.float32) * alpha_mask
             logging.debug(f"Applied additive blending, result shape: {result.shape}")
+            return np.clip(result, 0, 255).astype(np.uint8)
+    
+    def _draw_feedback_cross(self, frame: np.ndarray, position: Tuple[int, int], 
+                            radius: int, color: Tuple[int, int, int], alpha: float) -> np.ndarray:
+        """Draw a single feedback cross with alpha blending"""
+        x, y = position
+        
+        logging.debug(f"Drawing cross at ({x}, {y}) with radius {radius}, color {color}, alpha {alpha}")
+        
+        # Use radius to determine cross length (similar to circle size)
+        cross_length = radius * 2
+        cross_thickness = self.cross_thickness
+        
+        # Create a mask for the cross
+        mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+        
+        # Draw horizontal line
+        cv2.line(mask, (x - cross_length // 2, y), (x + cross_length // 2, y), 255, cross_thickness)
+        # Draw vertical line
+        cv2.line(mask, (x, y - cross_length // 2), (x, y + cross_length // 2), 255, cross_thickness)
+        
+        # Create colored overlay
+        overlay = np.zeros_like(frame)
+        overlay[mask > 0] = color
+        
+        # Apply alpha blending
+        if self.config['blend_mode'] == 'alpha':
+            # Alpha blending
+            alpha_mask = mask.astype(np.float32) / 255.0 * alpha
+            alpha_mask = np.stack([alpha_mask] * 3, axis=2)
+            
+            result = frame.astype(np.float32) * (1 - alpha_mask) + overlay.astype(np.float32) * alpha_mask
+            logging.debug(f"Applied alpha blending for cross, result shape: {result.shape}")
+            return result.astype(np.uint8)
+        else:
+            # Additive blending
+            alpha_mask = mask.astype(np.float32) / 255.0 * alpha
+            alpha_mask = np.stack([alpha_mask] * 3, axis=2)
+            
+            result = frame.astype(np.float32) + overlay.astype(np.float32) * alpha_mask
+            logging.debug(f"Applied additive blending for cross, result shape: {result.shape}")
             return np.clip(result, 0, 255).astype(np.uint8)
     
     def _save_debug_image(self, frame: np.ndarray, filename: str = None):
@@ -248,6 +305,7 @@ class FeedbackOverlay:
                 'action_name': f.get('action_name'),
                 'key_code': f.get('key_code'),
                 'position': f.get('position'),
+                'shape_type': f.get('shape_type', 'circle'),
                 'elapsed': time.time() - f.get('start_time', 0),
                 'duration': f.get('duration'),
                 'alpha': f.get('current_alpha', 0)
@@ -275,6 +333,13 @@ class FeedbackOverlay:
         """Update frame dimensions for better position calculations"""
         self.frame_width = width
         self.frame_height = height
+    
+    def set_cross_config(self, length: int = None, thickness: int = None):
+        """Update cross configuration"""
+        if length is not None:
+            self.cross_length = length
+        if thickness is not None:
+            self.cross_thickness = thickness
     
     def disable_feedback(self):
         """Temporarily disable feedback (circles won't appear)"""

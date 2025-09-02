@@ -9,7 +9,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Dict, Optional
-from config.config import LOGGING_CONFIG, COUNTER_CONFIG
+from config.config import COUNTER_CONFIG
 
 
 class CountHandler:

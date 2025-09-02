@@ -326,6 +326,282 @@ find_conda() {
     return 1
 }
 
+# Function to setup audio system (PipeWire or PulseAudio)
+setup_audio_system() {
+    log_message "Setting up audio system..."
+    
+    # Check if PipeWire is running (modern systems)
+    if pgrep -f "pipewire" > /dev/null; then
+        log_message "Detected PipeWire audio system"
+        setup_pipewire_audio
+    elif command -v pulseaudio > /dev/null 2>&1; then
+        log_message "Detected PulseAudio system"
+        setup_pulseaudio_legacy
+    else
+        log_message "WARNING: No audio system detected"
+        return 1
+    fi
+}
+
+# Function to setup PipeWire audio system
+setup_pipewire_audio() {
+    log_message "Setting up PipeWire audio system..."
+    
+    # Check if PipeWire is running
+    if ! pgrep -f "pipewire" > /dev/null; then
+        log_message "Starting PipeWire..."
+        systemctl --user start pipewire pipewire-pulse
+        sleep 3
+    fi
+    
+    # Check if pipewire-pulse is running (PulseAudio compatibility layer)
+    if ! pgrep -f "pipewire-pulse" > /dev/null; then
+        log_message "Starting PipeWire PulseAudio compatibility layer..."
+        systemctl --user start pipewire-pulse
+        sleep 2
+    fi
+    
+    # Set environment variables for PipeWire
+    export PULSE_RUNTIME_PATH="/run/user/$(id -u)/pulse"
+    export PULSE_COOKIE="$HOME/.config/pulse/cookie"
+    export PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native"
+    export PULSE_CLIENTCONFIG="$HOME/.config/pulse/client.conf"
+    export PIPEWIRE_RUNTIME_DIR="/run/user/$(id -u)/pipewire-0"
+    export PIPEWIRE_CONFIG_DIR="$HOME/.config/pipewire"
+    
+    # Create runtime directory if it doesn't exist
+    mkdir -p "$PULSE_RUNTIME_PATH"
+    
+    # Create PipeWire client configuration
+    local pulse_config_dir="$HOME/.config/pulse"
+    mkdir -p "$pulse_config_dir"
+    
+    # Create client configuration for PipeWire compatibility
+    local pulse_config_file="$pulse_config_dir/client.conf"
+    cat > "$pulse_config_file" << EOF
+# PipeWire client configuration for Human OversAIght
+# This configuration ensures compatibility with pygame and other audio applications
+
+# Enable shared memory for better performance
+enable-shm = yes
+
+# Set default sink (audio output device)
+# default-sink = auto
+
+# Set default source (audio input device)
+# default-source = auto
+
+# Enable network access (for remote audio)
+# load-module module-native-protocol-tcp auth-anonymous=1
+
+# Load ALSA compatibility layer
+load-module module-alsa-sink
+load-module module-alsa-source
+
+# Load null sink for applications that need it
+load-module module-null-sink sink_name=null sink_properties=device.description=Null_Output
+
+# Set reasonable buffer sizes
+default-fragments = 4
+default-fragment-size-msec = 25
+
+# Enable automatic device switching
+load-module module-switch-on-connect
+
+# Enable automatic volume restoration
+load-module module-stream-restore
+
+# Enable device policy
+load-module module-device-restore
+
+# Enable card policy
+load-module module-card-restore
+
+# Enable suspend on idle
+load-module module-suspend-on-idle
+
+# Set reasonable timeouts
+exit-idle-time = 20
+
+# PipeWire specific settings
+# Enable PipeWire compatibility
+load-module module-pipewire-sink
+load-module module-pipewire-source
+EOF
+    
+    log_message "Created PipeWire client configuration: $pulse_config_file"
+    
+    # Test PipeWire connection
+    if command -v pw-cli > /dev/null 2>&1; then
+        if pw-cli info all > /dev/null 2>&1; then
+            log_message "✓ PipeWire connection test successful"
+            
+            # List available audio devices
+            log_message "Available audio devices:"
+            pw-cli list-objects | grep -A 5 -B 5 "Audio/Sink" 2>/dev/null | tee -a "$LOG_FILE" || echo "No audio sinks found" | tee -a "$LOG_FILE"
+            
+        else
+            log_message "✗ PipeWire connection test failed"
+            return 1
+        fi
+    else
+        log_message "WARNING: pw-cli not available for testing"
+    fi
+    
+    # Test PulseAudio compatibility layer
+    if command -v pactl > /dev/null 2>&1; then
+        if pactl info > /dev/null 2>&1; then
+            log_message "✓ PulseAudio compatibility layer working"
+            
+            # List available sinks
+            log_message "Available PulseAudio sinks:"
+            pactl list short sinks 2>/dev/null | tee -a "$LOG_FILE" || echo "No PulseAudio sinks found" | tee -a "$LOG_FILE"
+            
+        else
+            log_message "✗ PulseAudio compatibility layer not working"
+            return 1
+        fi
+    else
+        log_message "WARNING: pactl not available for testing"
+    fi
+    
+    return 0
+}
+
+# Function to setup legacy PulseAudio system
+setup_pulseaudio_legacy() {
+    log_message "Setting up legacy PulseAudio system..."
+    
+    # Check if PulseAudio is installed
+    if ! command -v pulseaudio > /dev/null 2>&1; then
+        log_message "WARNING: PulseAudio not found, attempting to install..."
+        if command -v apt-get > /dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y pulseaudio pulseaudio-utils
+        elif command -v yum > /dev/null 2>&1; then
+            sudo yum install -y pulseaudio pulseaudio-utils
+        elif command -v dnf > /dev/null 2>&1; then
+            sudo dnf install -y pulseaudio pulseaudio-utils
+        else
+            log_message "WARNING: Could not install PulseAudio automatically"
+            return 1
+        fi
+    fi
+    
+    # Kill any existing PulseAudio processes
+    if pgrep -f "pulseaudio" > /dev/null; then
+        log_message "Killing existing PulseAudio processes..."
+        pkill -f "pulseaudio" 2>/dev/null
+        sleep 2
+    fi
+    
+    # Create PulseAudio configuration directory if it doesn't exist
+    local pulse_config_dir="$HOME/.config/pulse"
+    mkdir -p "$pulse_config_dir"
+    
+    # Create a basic PulseAudio configuration file
+    local pulse_config_file="$pulse_config_dir/client.conf"
+    cat > "$pulse_config_file" << EOF
+# PulseAudio client configuration for Human OversAIght
+# This configuration ensures audio applications can connect to PulseAudio
+
+# Enable shared memory for better performance
+enable-shm = yes
+
+# Set default sink (audio output device)
+# default-sink = auto
+
+# Set default source (audio input device)
+# default-source = auto
+
+# Enable network access (for remote audio)
+# load-module module-native-protocol-tcp auth-anonymous=1
+
+# Load ALSA compatibility layer
+load-module module-alsa-sink
+load-module module-alsa-source
+
+# Load null sink for applications that need it
+load-module module-null-sink sink_name=null sink_properties=device.description=Null_Output
+
+# Set reasonable buffer sizes
+default-fragments = 4
+default-fragment-size-msec = 25
+
+# Enable automatic device switching
+load-module module-switch-on-connect
+
+# Enable automatic volume restoration
+load-module module-stream-restore
+
+# Enable device policy
+load-module module-device-restore
+
+# Enable card policy
+load-module module-card-restore
+
+# Enable suspend on idle
+load-module module-suspend-on-idle
+
+# Set reasonable timeouts
+exit-idle-time = 20
+EOF
+    
+    log_message "Created PulseAudio configuration: $pulse_config_file"
+    
+    # Start PulseAudio daemon
+    log_message "Starting PulseAudio daemon..."
+    
+    # Set environment variables for PulseAudio
+    export PULSE_RUNTIME_PATH="/run/user/$(id -u)/pulse"
+    export PULSE_COOKIE="$HOME/.config/pulse/cookie"
+    
+    # Create runtime directory if it doesn't exist
+    mkdir -p "$PULSE_RUNTIME_PATH"
+    
+    # Start PulseAudio with our configuration
+    pulseaudio --daemonize --log-level=4 --log-target=stderr --realtime --no-drop-root --exit-idle-time=-1 --file="$pulse_config_file" &
+    local pulse_pid=$!
+    
+    # Wait for PulseAudio to start
+    local max_wait=30
+    local wait_count=0
+    while [ $wait_count -lt $max_wait ]; do
+        if pulseaudio --check 2>/dev/null; then
+            log_message "PulseAudio started successfully (PID: $pulse_pid)"
+            break
+        fi
+        
+        log_message "Waiting for PulseAudio to start... (attempt $((wait_count + 1))/$max_wait)"
+        sleep 1
+        wait_count=$((wait_count + 1))
+    done
+    
+    if [ $wait_count -ge $max_wait ]; then
+        log_message "WARNING: PulseAudio may not have started properly"
+        return 1
+    fi
+    
+    # Test PulseAudio connection
+    if command -v pactl > /dev/null 2>&1; then
+        if pactl info > /dev/null 2>&1; then
+            log_message "✓ PulseAudio connection test successful"
+            
+            # List available audio devices
+            log_message "Available audio devices:"
+            pactl list short sinks 2>/dev/null | tee -a "$LOG_FILE"
+            
+            return 0
+        else
+            log_message "WARNING: PulseAudio connection test failed"
+            return 1
+        fi
+    else
+        log_message "WARNING: pactl not available for testing PulseAudio"
+        return 1
+    fi
+}
+
 # Function to setup conda environment
 setup_conda() {
     log_message "Setting up conda environment..."
@@ -433,9 +709,206 @@ cleanup_obs_state() {
     log_message "OBS state cleanup completed"
 }
 
+# Function to verify OBS is actually running
+verify_obs_running() {
+    local obs_pid=$1
+    local max_wait=30
+    local wait_count=0
+    
+    log_message "Verifying OBS is actually running (PID: $obs_pid)..."
+    
+    while [ $wait_count -lt $max_wait ]; do
+        # Check if process is still running
+        if ! kill -0 $obs_pid 2>/dev/null; then
+            log_message "OBS process died during verification"
+            return 1
+        fi
+        
+        # Check if OBS window appears (most reliable indicator)
+        if command -v xdotool > /dev/null 2>&1; then
+            if xdotool search --name "OBS" 2>/dev/null | grep -q .; then
+                log_message "✓ OBS Studio window detected - application is running"
+                return 0
+            fi
+        fi
+        
+        # Alternative check: look for OBS in process list with more specific pattern
+        if pgrep -f "obs.*Studio\|obs-studio" > /dev/null; then
+            log_message "✓ OBS Studio process confirmed in process list"
+            return 0
+        fi
+        
+        # Check for OBS WebSocket server (if available)
+        if command -v netstat > /dev/null 2>&1; then
+            if netstat -tlnp 2>/dev/null | grep -q ":4444.*obs"; then
+                log_message "✓ OBS WebSocket server detected"
+                return 0
+            fi
+        fi
+        
+        log_message "Waiting for OBS to fully initialize... (attempt $((wait_count + 1))/$max_wait)"
+        sleep 2
+        wait_count=$((wait_count + 2))
+    done
+    
+    log_message "✗ OBS verification failed - application did not fully initialize"
+    return 1
+}
+
+# Function to check and create OBS scene collection if needed
+check_obs_scene_collection() {
+    log_message "Checking OBS scene collection 'opsroom1'..."
+    
+    local obs_config_dir="$HOME/.var/app/com.obsproject.Studio/config/obs-studio"
+    local profiles_dir="$obs_config_dir/basic/profiles"
+    local target_profile="$profiles_dir/opsroom1"
+    
+    if [ -d "$target_profile" ]; then
+        log_message "✓ Scene collection 'opsroom1' already exists"
+        return 0
+    fi
+    
+    log_message "Scene collection 'opsroom1' not found, checking for existing profiles..."
+    
+    # Check if there are any existing profiles
+    if [ -d "$profiles_dir" ]; then
+        local existing_profiles=$(ls -1 "$profiles_dir" 2>/dev/null | head -1)
+        if [ -n "$existing_profiles" ]; then
+            log_message "Found existing profile: $existing_profiles"
+            log_message "Copying existing profile to create 'opsroom1'..."
+            
+            # Copy the first existing profile to create opsroom1
+            cp -r "$profiles_dir/$existing_profiles" "$target_profile" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                log_message "✓ Successfully created 'opsroom1' scene collection from existing profile"
+                return 0
+            else
+                log_message "✗ Failed to copy existing profile"
+            fi
+        fi
+    fi
+    
+    log_message "No existing profiles found, will start OBS without specifying scene collection"
+    return 1
+}
+
+# Function to debug OBS startup issues
+debug_obs_startup() {
+    log_message "=== OBS Startup Debug Information ==="
+    
+    # Check OBS installation
+    log_message "OBS installation check:"
+    if command -v obs-studio > /dev/null 2>&1; then
+        log_message "  ✓ obs-studio found in PATH: $(which obs-studio)"
+    else
+        log_message "  ✗ obs-studio not found in PATH"
+    fi
+    
+    if command -v obs > /dev/null 2>&1; then
+        log_message "  ✓ obs found in PATH: $(which obs)"
+    else
+        log_message "  ✗ obs not found in PATH"
+    fi
+    
+    # Check for Flatpak OBS
+    if command -v flatpak > /dev/null 2>&1; then
+        if flatpak list | grep -q "com.obsproject.Studio"; then
+            log_message "  ✓ OBS Studio found via Flatpak: $(flatpak list | grep com.obsproject.Studio)"
+        else
+            log_message "  ✗ OBS Studio not found via Flatpak"
+        fi
+    else
+        log_message "  ℹ Flatpak not available"
+    fi
+    
+    # Check for running OBS processes
+    log_message "Running OBS processes:"
+    if pgrep -f "obs" > /dev/null; then
+        pgrep -f "obs" | while read pid; do
+            log_message "  PID $pid: $(ps -p $pid -o comm= 2>/dev/null)"
+        done
+    else
+        log_message "  No OBS processes running"
+    fi
+    
+    # Check OBS configuration directory
+    log_message "OBS configuration directory:"
+    if [ -d "$HOME/.config/obs-studio" ]; then
+        log_message "  ✓ OBS config directory exists: $HOME/.config/obs-studio"
+        ls -la "$HOME/.config/obs-studio/" 2>/dev/null | tee -a "$LOG_FILE"
+    else
+        log_message "  ✗ OBS config directory not found"
+    fi
+    
+    # Check for OBS scene collections
+    log_message "OBS scene collections:"
+    if [ -d "$HOME/.config/obs-studio/basic/scenes" ]; then
+        ls -la "$HOME/.config/obs-studio/basic/scenes/" 2>/dev/null | tee -a "$LOG_FILE"
+    else
+        log_message "  No OBS scenes directory found"
+    fi
+    
+    # Check for specific scene collection "opsroom-1"
+    log_message "Checking for scene collection 'opsroom-1':"
+    local obs_config_dir=""
+    
+    # Check Flatpak location first
+    if [ -d "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/basic/profiles/opsroom-1" ]; then
+        obs_config_dir="$HOME/.var/app/com.obsproject.Studio/config/obs-studio"
+        log_message "  ✓ Scene collection 'opsroom-1' exists in Flatpak location"
+        ls -la "$obs_config_dir/basic/profiles/opsroom-1/" 2>/dev/null | tee -a "$LOG_FILE"
+    elif [ -d "$HOME/.config/obs-studio/basic/profiles/opsroom-1" ]; then
+        obs_config_dir="$HOME/.config/obs-studio"
+        log_message "  ✓ Scene collection 'opsroom-1' exists in standard location"
+        ls -la "$obs_config_dir/basic/profiles/opsroom-1/" 2>/dev/null | tee -a "$LOG_FILE"
+    else
+        log_message "  ✗ Scene collection 'opsroom-1' not found"
+        log_message "  Available profiles:"
+        if [ -d "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/basic/profiles" ]; then
+            log_message "  Flatpak profiles:"
+            ls -la "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/basic/profiles/" 2>/dev/null | tee -a "$LOG_FILE"
+        fi
+        if [ -d "$HOME/.config/obs-studio/basic/profiles" ]; then
+            log_message "  Standard profiles:"
+            ls -la "$HOME/.config/obs-studio/basic/profiles/" 2>/dev/null | tee -a "$LOG_FILE"
+        fi
+    fi
+    
+    # Check system resources
+    log_message "System resources:"
+    log_message "  Available memory: $(free -h | grep Mem | awk '{print $7}')"
+    log_message "  CPU load: $(uptime | awk -F'load average:' '{print $2}')"
+    
+    # Check graphics drivers
+    log_message "Graphics drivers:"
+    if command -v nvidia-smi > /dev/null 2>&1; then
+        log_message "  ✓ NVIDIA drivers detected"
+        nvidia-smi --query-gpu=name,driver_version --format=csv,noheader,nounits 2>/dev/null | tee -a "$LOG_FILE"
+    else
+        log_message "  ℹ NVIDIA drivers not detected"
+    fi
+    
+    if command -v glxinfo > /dev/null 2>&1; then
+        log_message "  OpenGL info:"
+        glxinfo | grep "OpenGL version" 2>/dev/null | tee -a "$LOG_FILE"
+    fi
+    
+    log_message "=== End OBS Startup Debug ==="
+}
+
 # Function to start OBS Studio with specific scene collection
 start_obs() {
-    log_message "Starting OBS Studio with scene collection: opsroom-1..."
+    log_message "Starting OBS Studio with scene collection: opsroom1..."
+    
+    # Run OBS startup debugging
+    debug_obs_startup
+    
+    # Check and create scene collection if needed
+    local use_scene_collection=true
+    if ! check_obs_scene_collection; then
+        log_message "Will start OBS without specifying scene collection"
+        use_scene_collection=false
+    fi
     
     # Clean up any existing OBS state first
     cleanup_obs_state
@@ -462,6 +935,15 @@ start_obs() {
             "/opt/obs-studio/bin/obs"
             "/opt/obs-studio/bin/obs-studio"
         )
+        
+        # Check for Flatpak OBS first (most common on modern systems)
+        if command -v flatpak > /dev/null 2>&1; then
+            if flatpak list | grep -q "com.obsproject.Studio"; then
+                log_message "Found OBS via Flatpak, using flatpak run"
+                export OBS_PATH="flatpak run com.obsproject.Studio"
+                obs_found=true
+            fi
+        fi
         
         local obs_found=false
         for path in "${obs_paths[@]}"; do
@@ -499,7 +981,7 @@ start_obs() {
                 fi
             fi
             
-            # Check for flatpak installations
+            # Check for flatpak installations (already checked above, but keep for compatibility)
             if [ "$obs_found" = false ] && command -v flatpak > /dev/null 2>&1; then
                 if flatpak list | grep -q "obs"; then
                     log_message "Found OBS via flatpak, using flatpak run"
@@ -536,33 +1018,124 @@ start_obs() {
     # First attempt: Try with NVIDIA backend and force start flags
     log_message "Attempting to start OBS with NVIDIA backend and force start flags..."
     if [ -n "$OBS_PATH" ]; then
-        $OBS_PATH --collection "opsroom-1" --gl-backend nvidia --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
+        if [ "$use_scene_collection" = true ]; then
+            $OBS_PATH --collection "opsroom1" --gl-backend nvidia --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
+        else
+            $OBS_PATH --gl-backend nvidia --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
+        fi
         local obs_pid=$!
         sleep 3
         
-        # Check if OBS started successfully
+        # Check if OBS started successfully and is actually running
         if kill -0 $obs_pid 2>/dev/null; then
-            log_message "OBS Studio started successfully with NVIDIA backend (PID: $obs_pid)"
-            obs_started=true
+            log_message "OBS process started with NVIDIA backend (PID: $obs_pid)"
+            
+            # Verify OBS is actually running
+            if verify_obs_running $obs_pid; then
+                log_message "OBS Studio started successfully with NVIDIA backend (PID: $obs_pid)"
+                obs_started=true
+            else
+                log_message "NVIDIA backend failed - OBS did not fully initialize"
+                # Kill the process if it's still running but not verified
+                if kill -0 $obs_pid 2>/dev/null; then
+                    kill $obs_pid 2>/dev/null
+                    sleep 1
+                fi
+            fi
         else
-            log_message "NVIDIA backend failed, trying X11 backend..."
+            log_message "NVIDIA backend failed - process did not start"
         fi
     fi
     
     # Second attempt: Fallback to X11 backend if NVIDIA failed
     if [ "$obs_started" = false ] && [ -n "$OBS_PATH" ]; then
         log_message "Starting OBS with X11 backend fallback and force start flags..."
-        $OBS_PATH --collection "opsroom-1" --gl-backend x11 --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
+        if [ "$use_scene_collection" = true ]; then
+            $OBS_PATH --collection "opsroom1" --gl-backend x11 --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
+        else
+            $OBS_PATH --gl-backend x11 --safe-mode --disable-shutdown-check --minimize-to-tray --startpreview &
+        fi
         local obs_pid=$!
         sleep 3
         
-        # Check if OBS started successfully
+        # Check if OBS started successfully and is actually running
         if kill -0 $obs_pid 2>/dev/null; then
-            log_message "OBS Studio started successfully with X11 backend (PID: $obs_pid)"
-            obs_started=true
+            log_message "OBS process started with X11 backend (PID: $obs_pid)"
+            
+            # Verify OBS is actually running
+            if verify_obs_running $obs_pid; then
+                log_message "OBS Studio started successfully with X11 backend (PID: $obs_pid)"
+                obs_started=true
+            else
+                log_message "X11 backend failed - OBS did not fully initialize"
+                # Kill the process if it's still running but not verified
+                if kill -0 $obs_pid 2>/dev/null; then
+                    kill $obs_pid 2>/dev/null
+                    sleep 1
+                fi
+            fi
         else
-            log_message "WARNING: Failed to start OBS Studio with any backend"
-            return 1
+            log_message "X11 backend failed - process did not start"
+        fi
+    fi
+    
+    # Third attempt: Try minimal startup without problematic flags
+    if [ "$obs_started" = false ] && [ -n "$OBS_PATH" ]; then
+        log_message "Starting OBS with minimal startup flags (no backend specification)..."
+        if [ "$use_scene_collection" = true ]; then
+            $OBS_PATH --collection "opsroom1" &
+        else
+            $OBS_PATH &
+        fi
+        local obs_pid=$!
+        sleep 5
+        
+        # Check if OBS started successfully and is actually running
+        if kill -0 $obs_pid 2>/dev/null; then
+            log_message "OBS process started with minimal flags (PID: $obs_pid)"
+            
+            # Verify OBS is actually running
+            if verify_obs_running $obs_pid; then
+                log_message "OBS Studio started successfully with minimal flags (PID: $obs_pid)"
+                obs_started=true
+            else
+                log_message "Minimal startup failed - OBS did not fully initialize"
+                # Kill the process if it's still running but not verified
+                if kill -0 $obs_pid 2>/dev/null; then
+                    kill $obs_pid 2>/dev/null
+                    sleep 1
+                fi
+            fi
+        else
+            log_message "Minimal startup failed - process did not start"
+        fi
+    fi
+    
+    # Fourth attempt: Try starting OBS without specifying scene collection
+    if [ "$obs_started" = false ] && [ -n "$OBS_PATH" ]; then
+        log_message "Starting OBS without specifying scene collection (will use default)..."
+        $OBS_PATH &
+        local obs_pid=$!
+        sleep 5
+        
+        # Check if OBS started successfully and is actually running
+        if kill -0 $obs_pid 2>/dev/null; then
+            log_message "OBS process started without scene collection (PID: $obs_pid)"
+            
+            # Verify OBS is actually running
+            if verify_obs_running $obs_pid; then
+                log_message "OBS Studio started successfully without scene collection (PID: $obs_pid)"
+                obs_started=true
+            else
+                log_message "No scene collection startup failed - OBS did not fully initialize"
+                # Kill the process if it's still running but not verified
+                if kill -0 $obs_pid 2>/dev/null; then
+                    kill $obs_pid 2>/dev/null
+                    sleep 1
+                fi
+            fi
+        else
+            log_message "No scene collection startup failed - process did not start"
         fi
     fi
     
@@ -819,6 +1392,28 @@ check_dependencies() {
     return 0
 }
 
+# Function to wait for Python application to start
+wait_for_python_app() {
+    log_message "Waiting for Python application to start..."
+    
+    local max_wait=60
+    local wait_count=0
+    
+    while [ $wait_count -lt $max_wait ]; do
+        if pgrep -f "python.*run_multi_apps.py" > /dev/null; then
+            log_message "Python application detected as running"
+            return 0
+        fi
+        
+        log_message "Waiting for Python application... (attempt $((wait_count + 1))/$max_wait)"
+        sleep 1
+        wait_count=$((wait_count + 1))
+    done
+    
+    log_message "WARNING: Python application not detected after $max_wait seconds"
+    return 1
+}
+
 # Main execution
 main() {
     log_message "=== Human OversAIght Autostart Started ==="
@@ -860,6 +1455,13 @@ main() {
         exit 1
     fi
     
+    # Setup audio system (PipeWire or PulseAudio)
+    if ! setup_audio_system; then
+        log_message "WARNING: Failed to setup audio system, audio may not work properly"
+    else
+        log_message "Audio system setup completed successfully"
+    fi
+    
     # Check dependencies
     if ! check_dependencies; then
         log_message "ERROR: Dependencies check failed, exiting"
@@ -897,11 +1499,44 @@ main() {
     log_message "Python path: $(which python)"
     log_message "Conda environment: $(conda info --envs | grep '*' | awk '{print $1}')"
     
+    # Set additional environment variables for audio compatibility
+    export PULSE_RUNTIME_PATH="/run/user/$(id -u)/pulse"
+    export PULSE_COOKIE="$HOME/.config/pulse/cookie"
+    export PULSE_SERVER="unix:/run/user/$(id -u)/pulse/native"
+    export PULSE_CLIENTCONFIG="$HOME/.config/pulse/client.conf"
+    
+    # Set PipeWire-specific environment variables
+    export PIPEWIRE_RUNTIME_DIR="/run/user/$(id -u)/pipewire-0"
+    export PIPEWIRE_CONFIG_DIR="$HOME/.config/pipewire"
+    
+    # Set pygame audio environment variables
+    export SDL_AUDIODRIVER="pulse"
+    export AUDIODEV="pulse"
+    
+    log_message "Audio environment variables set:"
+    log_message "  PULSE_RUNTIME_PATH: $PULSE_RUNTIME_PATH"
+    log_message "  PULSE_SERVER: $PULSE_SERVER"
+    log_message "  PIPEWIRE_RUNTIME_DIR: $PIPEWIRE_RUNTIME_DIR"
+    log_message "  SDL_AUDIODRIVER: $SDL_AUDIODRIVER"
+    
     # Run the script with all arguments passed through
-    if python run_multi_apps.py "$@"; then
-        log_message "Inference script completed successfully"
+    if python run_multi_apps.py "$@" & then
+        local python_pid=$!
+        log_message "Python application started with PID: $python_pid"
+        
+        # Wait for Python application to fully start
+        if wait_for_python_app; then
+            # Wait for the Python application to complete
+            wait $python_pid
+            log_message "Inference script completed successfully"
+        else
+            log_message "WARNING: Python application may not have started properly"
+            # Wait for the Python application to complete
+            wait $python_pid
+            log_message "Inference script completed"
+        fi
     else
-        log_message "ERROR: Inference script failed with exit code $?"
+        log_message "ERROR: Failed to start inference script"
         exit 1
     fi
 }

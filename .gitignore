@@ -16,3 +16,4 @@ groundingdino**.**
 **/runs/train/*.jpg
 last.pt
 epoch**.pt
+vscode.deb

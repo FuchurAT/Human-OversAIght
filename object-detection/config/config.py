@@ -39,7 +39,7 @@ APPLICATIONS = {
         ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
-        'enabled': False,
+        'enabled': True,
         'ndi': {
             'enabled': False,
             'source_name': 'Human-OversAIght-App02',
@@ -58,7 +58,7 @@ APPLICATIONS = {
         ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
-        'enabled': False,  # Disabled by default
+        'enabled': True,  # Disabled by default
         'ndi': {
             'enabled': False,
             'source_name': 'Human-OversAIght-App03',
@@ -73,14 +73,14 @@ APPLICATIONS = {
         'name': 'Application 04',
         'screen_id': 0,  # Same screen as app_01 but different position
         'video_folders': [
-            '/home/theopsroom/Documents/NEW-R',
+            '/home/theopsroom/Documents/VERTICAL-RED'
         ],
         'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
-        'window_title': 'Object Detection - App 03',
-        'enabled': False,  # Disabled by default
+        'window_title': 'Object Detection - App 04',
+        'enabled': True,  # Disabled by default
         'ndi': {
             'enabled': False,
-            'source_name': 'Human-OversAIght-App03',
+            'source_name': 'Human-OversAIght-App04',
             'group_name': 'Detection-Apps',
             'video_format': 'BGRX',
             'frame_rate': 30,
@@ -192,55 +192,54 @@ DEFAULT_VIDEO_PATH = "/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS"
 # Maps the 48 buttons from Arduino Mega to keyboard actions in the detection application
 # Extended to support multiple applications with app_id parameter
 BUTTON_MAPPING = {
-    # All 48 buttons now act as space (toggle unmask/blur mode) for all applications
-    0: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    1: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_01'},
-    2: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    3: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    4: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_02'},
-    5: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    6: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    7: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_03'},
-    8: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    9: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    10: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_02'},
-    11: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    12: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    13: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_01'},
-    14: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    15: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    16: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_02'},
-    17: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    18: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    19: {'key': 'space', 'action': 'next_video', 'description': 'Toggle unmask/blur mode', 'app_id': 'app_03'},
-    20: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    21: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    22: {'key': 'f', 'action': 'next_folder', 'description': 'Switch to next folder', 'app_id': 'all'},
-    23: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    24: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    25: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    26: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    27: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    28: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    29: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    30: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    31: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    32: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    33: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    34: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    35: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    36: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    37: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    38: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    39: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    40: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    41: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    42: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    43: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    44: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    45: {'key': 'space', 'action': 'toggle_unmask', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    46: {'key': 'space', 'action': 'toggle_glitches', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
-    47: {'key': 'space', 'action': 'toggle_gradcam', 'description': 'Toggle unmask/blur mode', 'app_id': 'all'},
+    0: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
+    1: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02,app_03'},
+    2: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    3: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
+    4: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
+    5: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    6: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
+    7: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
+    8: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    9: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
+    10: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
+    11: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    12: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
+    13: {'key': 'space', 'action': 'next_video', 'app_id': 'app_01'},
+    14: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    15: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
+    16: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
+    17: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    18: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
+    19: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
+    20: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    21: {'key': 'space', 'action': 'toggle_unmask', 'app_id': 'all'},
+    22: {'key': 'f', 'action': 'next_folder', 'app_id': 'all'},
+    23: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    24: {'key': 'space', 'action': 'next_video', 'app_id': 'app_01'},
+    25: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    26: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    27: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
+    28: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    29: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    30: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
+    31: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    32: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    33: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
+    34: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
+    35: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    36: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
+    37: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    38: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    39: {'key': 'space', 'action': 'next_video', 'app_id': 'app_01'},
+    40: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    41: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    42: {'key': 'space', 'action': 'next_video', 'app_id': 'app_02'},
+    43: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    44: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
+    45: {'key': 'space', 'action': 'next_video', 'app_id': 'app_03'},
+    46: {'key': 'space', 'action': 'toggle_glitches', 'app_id': 'all'},
+    47: {'key': 'space', 'action': 'toggle_gradcam', 'app_id': 'all'},
 }
 
 # Original button mappings (commented out for reference)
@@ -454,40 +453,40 @@ FEEDBACK_CONFIG = {
 # Maps action names to specific colors for visual feedback
 ACTION_FEEDBACK_COLORS = {
     'exit': (0, 0, 255),               # Red
-    'next_video': (0, 255, 0),         # Green
-    'next_folder': (0, 255, 255),      # Yellow (Cyan)
-    'previous_video': (0, 255, 255),   # Yellow
-    'restart_video': (255, 0, 255),    # Magenta
+    'next_video': (0, 0, 0),         # Black
+    'next_folder': (255, 255, 255),  # White
+    'previous_video': (255, 255, 255),  # White
+    'restart_video': (0, 0, 255),       # Red
     'pause_resume': (255, 255, 0),     # Cyan
-    'fast_forward': (0, 128, 255),     # Orange
+    'fast_forward': (166, 166, 166),     # Grey
     'home': (255, 128, 0),             # Blue-Orange
-    'toggle_legend': (128, 255, 128),  # Light Green
+    'toggle_legend': (255, 255, 255),  # White
     'toggle_fps': (255, 128, 128),     # Light Red
     'toggle_gradcam': (128, 128, 255), # Light Blue
-    'toggle_gradcam_box': (255, 255, 128), # Light Yellow
-    'toggle_glitches': (255, 128, 255), # Light Magenta
+    'toggle_gradcam_box': (200, 200, 200), # Light Yellow
+    'toggle_glitches': (250, 227, 212), # Very Light Blue
     'toggle_center_display': (128, 255, 255), # Light Cyan
     'toggle_visualization': (255, 255, 255), # White
     'toggle_debug': (64, 64, 64),      # Dark Gray
-    'toggle_unmask': (0, 255, 128),    # Green-Blue
+    'toggle_unmask': (128, 128, 128),    # grey
     'threshold_0.1': (0, 25, 255),     # Dark Red
     'threshold_0.2': (0, 51, 255),     # Darker Red
     'threshold_0.3': (0, 76, 255),     # Medium Red
     'threshold_0.4': (0, 102, 255),    # Light Red
     'threshold_0.5': (0, 128, 255),    # Orange
     'threshold_0.6': (0, 153, 255),    # Light Orange
-    'threshold_0.7': (0, 179, 255),    # Yellow-Orange
-    'threshold_0.8': (0, 204, 255),    # Light Yellow
-    'threshold_0.9': (0, 230, 255),    # Very Light Yellow
-    'threshold_1.0': (0, 255, 255),    # Yellow
-    'increase_threshold': (0, 255, 0), # Green
+    'threshold_0.7': (250, 227, 212),    # Very Light Blue
+    'threshold_0.8': (255, 255, 255),    # Light Yellow
+    'threshold_0.9': (211, 211, 211),    # Very Light Grey
+    'threshold_1.0': (255, 255, 255),    # Yellow
+    'increase_threshold': (250, 227, 212), # Very Light Blue
     'decrease_threshold': (255, 0, 0), # Blue
     'reset_display': (255, 0, 0),      # Blue
-    'jump_frame_forward': (0, 255, 255), # Yellow
-    'jump_frame_backward': (255, 0, 255), # Magenta
-    'toggle_edge_detection': (165, 42, 42), # Brown
-    'clear_detections': (255, 0, 0),   # Blue
-    'reset_counter': (255, 140, 0),    # Dark Orange
+    'jump_frame_forward': (255, 0, 0),      # Blue
+    'jump_frame_backward': (0, 0, 255), # Red
+    'toggle_edge_detection': (0, 0, 255), # Red
+    'clear_detections': (0, 0, 0),   # Blue
+    'reset_counter': (255, 255, 255),    # Dark Orange
 }
 
 # Key-specific feedback colors (for keyboard input)

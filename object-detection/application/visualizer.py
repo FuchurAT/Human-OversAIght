@@ -5,6 +5,9 @@ Visualization utilities for the object detection application.
 import cv2
 import numpy as np
 import time
+import os
+os.environ["SDL_AUDIODRIVER"] = "alsa"
+os.environ["AUDIODEV"] = "hw:1,0"  # Replace with your ALSA device
 import pygame
 import pygame._sdl2.audio as sdl2_audio
 from pathlib import Path
@@ -75,44 +78,15 @@ class DetectionVisualizer:
         self.button_sound_path = project_root / "assets" / "sounds" / "buttons"
         self.button_sounds = list(self.button_sound_path.glob("*.wav"))
         
-        # Initialize button sound (only if audio is available)
-        if self.audio_available and self.button_sound_path.exists():
-            try:
-                for sound_file in self.button_sounds:
-                    try:
-                        sound_name = sound_file.stem
-                        print(f"Attempting to load: {sound_file}")
-                        # Load as pygame.mixer.Sound for compatibility
-                        self.button_sounds[sound_name] = pygame.mixer.Sound(str(sound_file))
-                        print(f"Successfully loaded button sound: {sound_name}")
-                    except Exception as e:
-                        print(f"Warning: Could not load button sound {sound_file.name}: {e}")
-            except Exception as e:
-                print(f"Warning: Could not load button sound: {e}")
-                self.vocal_sound = None
-        
         # Initialize button sounds dictionary for easy access
         self.button_sounds_dict = {}
-        if self.audio_available and self.button_sound_path.exists():
-            try:
-                for sound_file in self.button_sounds:
-                    try:
-                        sound_name = sound_file.stem
-                        print(f"Attempting to load button sound: {sound_file}")
-                        # Load as pygame.mixer.Sound for compatibility
-                        self.button_sounds_dict[sound_name] = pygame.mixer.Sound(str(sound_file))
-                        print(f"Successfully loaded button sound: {sound_name}")
-                    except Exception as e:
-                        print(f"Warning: Could not load button sound {sound_file.name}: {e}")
-            except Exception as e:
-                print(f"Warning: Could not load button sound: {e}")
-                self.vocal_sound = None
         
         # Initialize ambient sound paths
         self.ambient_sounds_dir = project_root / "assets" / "sounds" / "ambient"
         
-        # Load ambient sound files (only if audio is available)
+        # Load sound files (only if audio is available)
         if self.audio_available:
+            self._load_button_sounds()
             self._load_ambient_sounds()
     
     def _initialize_audio_with_fallback(self) -> None:
@@ -134,7 +108,7 @@ class DetectionVisualizer:
                 devicename=device,
                 frequency=22050,      # Lower frequency for Bluetooth stability
                 size=-16,            # 16-bit audio
-                channels=6,          # Stereo
+                channels=2,          # Stereo
                 buffer=1024,         # Larger buffer for Bluetooth latency
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -149,7 +123,7 @@ class DetectionVisualizer:
                 devicename=device,
                 frequency=22050,      # Very low frequency
                 size=-16,            # 16-bit audio
-                channels=6,          # Mono (more stable for Bluetooth)
+                channels=2,          # Mono (more stable for Bluetooth)
                 buffer=2048,         # Very large buffer
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -166,7 +140,7 @@ class DetectionVisualizer:
                 devicename=device,
                 frequency=22050,
                 size=-16,
-                channels=6,
+                channels=2,
                 buffer=512,
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -182,7 +156,7 @@ class DetectionVisualizer:
                 devicename=device,
                 frequency=8000,       # Very low frequency
                 size=-8,             # 8-bit audio
-                channels=6,          # Mono
+                channels=2,          # Mono
                 buffer=4096,         # Maximum buffer
                 allowedchanges=pygame.AUDIO_ALLOW_FREQUENCY_CHANGE | pygame.AUDIO_ALLOW_CHANNELS_CHANGE
             )
@@ -259,6 +233,52 @@ class DetectionVisualizer:
             
         except Exception as e:
             print(f"Warning: Error loading ambient sounds: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _load_button_sounds(self) -> None:
+        """Load all available button sound files"""
+        print(f"Loading button sounds from: {self.button_sound_path}")
+        print(f"Directory exists: {self.button_sound_path.exists()}")
+        print(f"Audio available: {self.audio_available}")
+        
+        if not self.audio_available:
+            print("Audio not available, skipping button sound loading")
+            return
+        
+        # Additional safety check
+        if not self.is_audio_safe():
+            print("Audio not safe, disabling audio functionality")
+            self.disable_audio()
+            return
+            
+        if not self.button_sound_path.exists():
+            print(f"Button sounds directory does not exist: {self.button_sound_path}")
+            return
+            
+        try:
+            # Clear existing button sounds
+            self.button_sounds_dict = {}
+            
+            # Load all .wav files from the button directory
+            wav_files = list(self.button_sound_path.glob("*.wav"))
+            print(f"Found button WAV files: {[f.name for f in wav_files]}")
+            
+            for sound_file in wav_files:
+                try:
+                    sound_name = sound_file.stem
+                    print(f"Attempting to load button sound: {sound_file}")
+                    # Load as pygame.mixer.Sound for compatibility
+                    self.button_sounds_dict[sound_name] = pygame.mixer.Sound(str(sound_file))
+                    print(f"Successfully loaded button sound: {sound_name}")
+                except Exception as e:
+                    print(f"Warning: Could not load button sound {sound_file.name}: {e}")
+            
+            print(f"Loaded {len(self.button_sounds_dict)} button sound(s)")
+            print(f"Button sounds loaded: {list(self.button_sounds_dict.keys())}")
+            
+        except Exception as e:
+            print(f"Warning: Error loading button sounds: {e}")
             import traceback
             traceback.print_exc()
     
@@ -454,34 +474,53 @@ class DetectionVisualizer:
     
     def play_button_sound(self, sound_name: str = None, volume: float = 1.0) -> bool:
         """Play a button sound effect"""
-        if not self.audio_available or not self.button_sounds_dict:
-            print("No button sounds available")
-            return False
+        print(f"DEBUG: play_button_sound called with sound_name={sound_name}, volume={volume}")
+        print(f"DEBUG: audio_available={self.audio_available}")
+        print(f"DEBUG: button_sounds_dict has {len(self.button_sounds_dict)} sounds")
+        print(f"DEBUG: button_sounds_dict keys: {list(self.button_sounds_dict.keys())}")
         
-        # If no specific sound is requested, play a random one
-        if sound_name is None:
-            available_sounds = list(self.button_sounds_dict.keys())
-            if available_sounds:
-                import random
-                sound_name = random.choice(available_sounds)
-                print(f"Selected random button sound: {sound_name}")
-            else:
-                print("No button sounds loaded")
+        def _play_sound():
+            if not self.audio_available or not self.button_sounds_dict:
+                print("DEBUG: No button sounds available")
+                return False
+            
+            mapped_name = sound_name 
+            
+            # If no specific sound is requested, play a random one
+            if mapped_name is None:
+                available_sounds = list(self.button_sounds_dict.keys())
+                if available_sounds:
+                    import random
+                    mapped_name = random.choice(available_sounds)
+                    print(f"DEBUG: Selected random button sound: {mapped_name}")
+                else:
+                    print("DEBUG: No button sounds loaded")
+                    return False
+            
+            if mapped_name not in self.button_sounds_dict and sounmapped_named_name is not None:
+                print(f"DEBUG: Button sound '{mapped_name}' not found. Available: {list(self.button_sounds_dict.keys())}")
+                return False
+            
+            try:
+                sound_object = self.button_sounds_dict[mapped_name]
+                print(f"DEBUG: Got sound object: {sound_object}")
+                sound_object.set_volume(volume)
+                print(f"DEBUG: Set volume to {volume}")
+                
+                # Use the simple play method without channel management
+                sound_object.play()
+                print(f"DEBUG: Called play() method")
+                print(f"Playing button sound: {mapped_name}")
+                return True
+            except Exception as e:
+                print(f"DEBUG: Error playing button sound {mapped_name}: {e}")
+                import traceback
+                traceback.print_exc()
                 return False
         
-        if sound_name not in self.button_sounds_dict:
-            print(f"Button sound '{sound_name}' not found. Available: {list(self.button_sounds_dict.keys())}")
-            return False
-        
-        try:
-            sound_object = self.button_sounds_dict[sound_name]
-            sound_object.set_volume(volume)
-            sound_object.play()
-            print(f"Playing button sound: {sound_name}")
-            return True
-        except Exception as e:
-            print(f"Error playing button sound {sound_name}: {e}")
-            return False
+        result = self._safe_audio_operation("play_button_sound", _play_sound)
+        print(f"DEBUG: _safe_audio_operation returned: {result}")
+        return result
     
     def get_available_button_sounds(self) -> List[str]:
         """Get list of available button sound names"""
@@ -503,17 +542,21 @@ class DetectionVisualizer:
     
     def play_random_button_sound(self, volume: float = 1.0) -> bool:
         """Play a random button sound effect"""
-        if not self.audio_available or not self.button_sounds_dict:
-            print("No button sounds available")
-            return False
+        def _play_random_sound():
+            if not self.audio_available or not self.button_sounds_dict:
+                print("No button sounds available")
+                return False
+            
+            if self.sound_name is not None:
+                try:
+                    import random
+                    sound_name = random.choice(list(self.button_sounds_dict.keys()))
+                    return (self.sound_name, volume)
+                except Exception as e:
+                    print(f"Error playing random button sound: {e}")
+                    return False
         
-        try:
-            import random
-            sound_name = random.choice(list(self.button_sounds_dict.keys()))
-            return self.play_button_sound(sound_name, volume)
-        except Exception as e:
-            print(f"Error playing random button sound: {e}")
-            return False
+        return self._safe_audio_operation("play_random_button_sound", _play_random_sound)
     
     def ensure_ambient_playing(self) -> None:
         """Ensure ambient sound is playing, restart if it stopped"""
@@ -532,6 +575,73 @@ class DetectionVisualizer:
             except Exception as e:
                 print(f"Error restarting ambient sound: {e}")
                 self.current_ambient = None
+    
+    def ensure_button_sounds_working(self) -> bool:
+        """Ensure button sounds are working properly, reload if needed"""
+        print(f"DEBUG: ensure_button_sounds_working called")
+        print(f"DEBUG: audio_available={self.audio_available}")
+        print(f"DEBUG: is_audio_safe={self.is_audio_safe()}")
+        
+        if not self.audio_available or not self.is_audio_safe():
+            print(f"DEBUG: Audio not available or not safe")
+            return False
+            
+        try:
+            # Check if button sounds are loaded
+            if not self.button_sounds_dict:
+                print("DEBUG: Button sounds not loaded, attempting to reload...")
+                self._load_button_sounds()
+                result = len(self.button_sounds_dict) > 0
+                print(f"DEBUG: Reload result: {result}")
+                return result
+            
+            # Test if at least one button sound can be played
+            test_sound = list(self.button_sounds_dict.values())[0]
+            if test_sound:
+                print(f"DEBUG: Button sounds appear to be working")
+                return True
+            else:
+                print("DEBUG: Button sounds appear to be corrupted, reloading...")
+                self._load_button_sounds()
+                result = len(self.button_sounds_dict) > 0
+                print(f"DEBUG: Reload result: {result}")
+                return result
+                
+        except Exception as e:
+            print(f"DEBUG: Error checking button sounds: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def get_available_channels(self) -> int:
+        """Get the number of available audio channels"""
+        try:
+            if hasattr(pygame.mixer, 'get_num_channels'):
+                return pygame.mixer.get_num_channels()
+            else:
+                return 8  # Default pygame mixer channels
+        except:
+            return 8
+    
+    def reserve_button_channel(self) -> bool:
+        """Reserve a specific channel for button sounds"""
+        try:
+            # Ensure we have enough channels
+            if self.get_available_channels() < 2:
+                print("Not enough audio channels available for button sounds")
+                return False
+            
+            # Test channel 1 for button sounds
+            channel = pygame.mixer.Channel(1)
+            if channel:
+                print("Successfully reserved channel 1 for button sounds")
+                return True
+            else:
+                print("Could not reserve channel 1 for button sounds")
+                return False
+        except Exception as e:
+            print(f"Error reserving button channel: {e}")
+            return False
     
     def draw_detection_overlays(self, frame: np.ndarray, detections: List[Detection]) -> np.ndarray:
         """Draw detection overlays on the frame"""
@@ -810,20 +920,20 @@ class DetectionVisualizer:
             
             # Play button sound when toggling display mode
             if self.audio_available and self.is_audio_safe():
-                self.play_button_sound()
+                self.play_button_sound(None)
         elif key == ord('g') and ENABLE_GRAD_CAM_VIEW:  # 'g' key to toggle Grad-CAM
             if app_instance:
                 app_instance.display_config.gradcam_enabled = not app_instance.display_config.gradcam_enabled
                 print(f"Grad-CAM {'enabled' if app_instance.display_config.gradcam_enabled else 'disabled'}")
                 # Play button sound when toggling Grad-CAM
                 if self.audio_available and self.is_audio_safe():
-                    self.play_button_sound()
+                    self.play_button_sound(None)
         elif key == ord('w'):
             app_instance.display_config.enable_glitches = not app_instance.display_config.enable_glitches
             print(f"Glitches {'enabled' if app_instance.display_config.enable_glitches else 'disabled'}")
             # Play button sound when toggling glitches
             if self.audio_available and self.is_audio_safe():
-                self.play_button_sound()
+                self.play_button_sound(None)
     
     def update_display_config(self, new_config: DisplayConfig) -> None:
         """Update the display configuration"""
@@ -866,6 +976,10 @@ class DetectionVisualizer:
             if self.audio_available and self.ambient_sounds_dir.exists():
                 self._load_ambient_sounds()
             
+            # Reload button sounds if audio is now available
+            if self.audio_available and self.button_sound_path.exists():
+                self._load_button_sounds()
+            
             return self.audio_available
             
         except Exception as e:
@@ -875,20 +989,44 @@ class DetectionVisualizer:
     
     def _safe_audio_operation(self, operation_name: str, operation_func, *args, **kwargs):
         """Safely execute audio operations with automatic recovery"""
+        print(f"DEBUG: _safe_audio_operation called for: {operation_name}")
+        print(f"DEBUG: audio_available={self.audio_available}")
+        
         try:
             if not self.is_audio_safe():
+                print(f"DEBUG: Audio not safe, attempting reinitialization")
                 if not self.reinitialize_audio():
-                    print(f"Cannot perform {operation_name} - audio not available")
+                    print(f"DEBUG: Cannot perform {operation_name} - audio not available")
                     return False
-            return operation_func(*args, **kwargs)
+            
+            # For button sound operations, ensure button sounds are working
+            if "button" in operation_name.lower():
+                print(f"DEBUG: Checking button sounds for {operation_name}")
+                if not self.ensure_button_sounds_working():
+                    print(f"DEBUG: Cannot perform {operation_name} - button sounds not available")
+                    return False
+            
+            print(f"DEBUG: Calling operation function for {operation_name}")
+            result = operation_func(*args, **kwargs)
+            print(f"DEBUG: Operation function returned: {result}")
+            return result
         except Exception as e:
-            print(f"Error in {operation_name}: {e}")
+            print(f"DEBUG: Error in {operation_name}: {e}")
+            import traceback
+            traceback.print_exc()
             # Try to recover
             if self.reinitialize_audio():
                 try:
-                    return operation_func(*args, **kwargs)
+                    # For button sound operations, ensure button sounds are working after recovery
+                    if "button" in operation_name.lower():
+                        if not self.ensure_button_sounds_working():
+                            print(f"DEBUG: Cannot perform {operation_name} after recovery - button sounds not available")
+                            return False
+                    result = operation_func(*args, **kwargs)
+                    print(f"DEBUG: Recovery successful, operation returned: {result}")
+                    return result
                 except Exception as e2:
-                    print(f"Recovery failed for {operation_name}: {e2}")
+                    print(f"DEBUG: Recovery failed for {operation_name}: {e2}")
                     self.disable_audio()
                     return False
             else:
@@ -923,4 +1061,48 @@ class DetectionVisualizer:
                 return False
         except Exception as e:
             print(f"Audio safety check failed: {e}")
+            return False 
+    
+    def maintain_button_sounds(self) -> None:
+        """Periodically check and maintain button sound functionality"""
+        if not self.audio_available:
+            return
+            
+        try:
+            # Check if button sounds are still working
+            if not self.ensure_button_sounds_working():
+                print("Button sounds not working, attempting to reload...")
+                self._load_button_sounds()
+            
+            # Ensure we have a reserved channel
+            if not self.reserve_button_channel():
+                print("Could not reserve button channel, trying to reinitialize...")
+                if self.reinitialize_audio():
+                    self._load_button_sounds()
+                    self.reserve_button_channel()
+            
+        except Exception as e:
+            print(f"Error maintaining button sounds: {e}")
+    
+    def test_button_sounds(self) -> bool:
+        """Test if button sounds are working by playing a silent test"""
+        if not self.audio_available or not self.button_sounds_dict:
+            return False
+            
+        try:
+            # Try to play a very short sound to test functionality
+            test_sound = list(self.button_sounds_dict.values())[0]
+            if test_sound:
+                # Set volume to 0 to make it silent
+                test_sound.set_volume(0.0)
+                channel = pygame.mixer.Channel(1)
+                if channel:
+                    channel.play(test_sound)
+                    # Stop immediately
+                    channel.stop()
+                    print("Button sound test successful")
+                    return True
+            return False
+        except Exception as e:
+            print(f"Button sound test failed: {e}")
             return False 
