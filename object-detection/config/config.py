@@ -20,11 +20,13 @@ APPLICATIONS = {
         'name': 'Application 01',
         'screen_id': 0,  # Primary monitor (0), secondary (1), etc.
         'video_folders': [
-            '/home/theopsroom/Documents/NEW',
+            'E:/Projects/human-oversaight/data/videos/vertical',
         ],
-        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 01',
         'enabled': True,
+        'auto_restart': True,
+        'auto_restart_time': 2,  # minutes
         'ndi': {
             'enabled': False,
             'source_name': 'Human-OversAIght-App01',
@@ -39,11 +41,13 @@ APPLICATIONS = {
         'name': 'Application 02', 
         'screen_id': 0,  # Secondary monitor
         'video_folders': [
-            '/home/theopsroom/Human-OversAIght/data/videos/vertical'
+            'E:/Projects/human-oversaight/data/videos/vertical'
         ],
-        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 02',
         'enabled': True,
+        'auto_restart': True,
+        'auto_restart_time': 2,  # minutes
         'ndi': {
             'enabled': False,
             'source_name': 'Human-OversAIght-App02',
@@ -58,11 +62,13 @@ APPLICATIONS = {
         'name': 'Application 03',
         'screen_id': 0,  # Same screen as app_01 but different position
         'video_folders': [
-            '/home/theopsroom/Human-OversAIght/data/videos/square'
+            'E:/Projects/human-oversaight/data/videos/vertical'
         ],
-        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 03',
         'enabled': True,  # Disabled by default
+        'auto_restart': True,
+        'auto_restart_time': 2,  # minutes
         'ndi': {
             'enabled': False,
             'source_name': 'Human-OversAIght-App03',
@@ -77,11 +83,13 @@ APPLICATIONS = {
         'name': 'Application 04',
         'screen_id': 0,  # Same screen as app_01 but different position
         'video_folders': [
-            '/home/theopsroom/Documents/VERTICAL-RED'
+            'E:/Projects/human-oversaight/data/videos/vertical'
         ],
-        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 04',
         'enabled': True,  # Disabled by default
+        'auto_restart': True,
+        'auto_restart_time': 2,  # minutes
         'ndi': {
             'enabled': False,
             'source_name': 'Human-OversAIght-App04',
@@ -96,11 +104,13 @@ APPLICATIONS = {
         'name': 'Application 05',
         'screen_id': 0,  # Same screen as app_01 but different position
         'video_folders': [
-            '/home/theopsroom/Documents/NEW-R'
+            'E:/Projects/human-oversaight/data/videos/vertical'
         ],
-        'model_path': '/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt',
+        'model_path': 'E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt',
         'window_title': 'Object Detection - App 05',
         'enabled': True,  # Disabled by default
+        'auto_restart': True,
+        'auto_restart_time': 2,  # minutes
         'ndi': {
             'enabled': False,
             'source_name': 'Human-OversAIght-App04',
@@ -208,7 +218,7 @@ FPS_LINE_SPACING = 30
 # File Paths
 # DEFAULT_MODEL_PATH = "/home/theopsroom/App/src/cnn-detection/app/runs/train/weights/best.pt"
 # DEFAULT_VIDEO_PATH = "/home/theopsroom/human-oversaight/client/apps/object-detection/videos/"
-DEFAULT_MODEL_PATH = "/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt"
+DEFAULT_MODEL_PATH = "E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt"
 DEFAULT_VIDEO_PATH = "/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS"
 
 # Button-to-Keyboard Mapping Configuration

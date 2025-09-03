@@ -30,6 +30,10 @@ class MultiAppManager:
         self.shutdown_event = False
         self._state_lock = threading.Lock()  # Thread safety for app states
         
+        # Auto-restart tracking
+        self.app_start_times: Dict[str, float] = {}
+        self.app_restart_timers: Dict[str, float] = {}
+        
         # Signal handling
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -144,11 +148,20 @@ class MultiAppManager:
                 'first_frame': True,
                 'fullscreen_size': None,
                 'window_name': f'Object Detection - {app_id}',
-                            'is_active': True,
-            'next_video_requested': False,
-            'next_video_request_count': 0,
-            'last_next_video_time': 0
+                'is_active': True,
+                'next_video_requested': False,
+                'next_video_request_count': 0,
+                'last_next_video_time': 0,
+                'auto_restart': app_config.get('auto_restart', False),
+                'auto_restart_time': app_config.get('auto_restart_time', 0)
             }
+            
+            # Initialize auto-restart tracking
+            if app_config.get('auto_restart', False):
+                import time
+                self.app_start_times[app_id] = time.time()
+                self.app_restart_timers[app_id] = app_config.get('auto_restart_time', 0) * 60  # Convert minutes to seconds
+                logging.info(f"Auto-restart enabled for {app_id}: {app_config.get('auto_restart_time', 0)} minutes")
             
             logging.info(f"Application {app_id} initialized: {len(video_files)} video files found")
             return True
@@ -190,6 +203,20 @@ class MultiAppManager:
                     
                     if not active_apps:
                         logging.info("No active applications, stopping")
+                        break
+                    
+                    # Check for auto-restart before processing frames
+                    for app_id in active_apps:
+                        if self._check_auto_restart(app_id):
+                            if not self._perform_auto_restart(app_id):
+                                # Auto-restart failed, mark app as inactive
+                                self.app_states[app_id]['is_active'] = False
+                    
+                    # Update active apps list after auto-restart checks
+                    active_apps = [app_id for app_id, state in self.app_states.items() if state['is_active']]
+                    
+                    if not active_apps:
+                        logging.info("No active applications after auto-restart, stopping")
                         break
                     
                     # Process frame from each app
@@ -545,6 +572,73 @@ class MultiAppManager:
             logging.error(f"Error signaling next folder for app {app_id}: {e}")
             return False
     
+    def _check_auto_restart(self, app_id: str) -> bool:
+        """Check if an application needs to be auto-restarted"""
+        if app_id not in self.app_start_times or app_id not in self.app_restart_timers:
+            return False
+        
+        import time
+        current_time = time.time()
+        start_time = self.app_start_times[app_id]
+        restart_interval = self.app_restart_timers[app_id]
+        
+        if current_time - start_time >= restart_interval:
+            logging.info(f"Auto-restart triggered for app {app_id} after {restart_interval/60:.1f} minutes")
+            return True
+        
+        return False
+    
+    def _perform_auto_restart(self, app_id: str) -> bool:
+        """Perform auto-restart for a specific application"""
+        try:
+            logging.info(f"Performing auto-restart for app {app_id}")
+            
+            # Clean up current video
+            state = self.app_states[app_id]
+            if state['cap']:
+                state['cap'].release()
+                state['cap'] = None
+            
+            if state['out_writer']:
+                state['out_writer'].release()
+                state['out_writer'] = None
+            
+            # Reset to first video and first folder
+            state['current_video_index'] = 0
+            state['current_folder_index'] = 0
+            state['frame_count'] = 0
+            state['first_frame'] = True
+            state['fullscreen_size'] = None
+            state['next_video_requested'] = False
+            state['next_video_request_count'] = 0
+            state['last_next_video_time'] = 0
+            
+            # Get video files from the first folder
+            first_folder = Path(state['video_folders'][0])
+            video_files = [f for f in first_folder.iterdir() if f.suffix.lower() == '.mp4']
+            if video_files:
+                state['video_files'] = video_files
+                logging.info(f"App {app_id}: Auto-restart - found {len(video_files)} videos in first folder")
+                
+                # Initialize the first video
+                app = self.apps[app_id]
+                self._initialize_app_video(app_id, app)
+                
+                # Reset start time for next auto-restart cycle
+                import time
+                self.app_start_times[app_id] = time.time()
+                
+                logging.info(f"Auto-restart completed for app {app_id}")
+                return True
+            else:
+                logging.error(f"App {app_id}: No videos found for auto-restart")
+                state['is_active'] = False
+                return False
+                
+        except Exception as e:
+            logging.error(f"Error performing auto-restart for app {app_id}: {e}")
+            return False
+    
     def stop_all_apps(self) -> None:
         """Stop all running applications"""
         logging.info("Stopping all applications...")
@@ -605,6 +699,24 @@ class MultiAppManager:
             if hasattr(app, 'get_total_video_count'):
                 total_videos = app.get_total_video_count()
             
+            # Calculate auto-restart information
+            auto_restart_info = {}
+            if app_id in self.app_start_times and app_id in self.app_restart_timers:
+                import time
+                current_time = time.time()
+                start_time = self.app_start_times[app_id]
+                restart_interval = self.app_restart_timers[app_id]
+                elapsed_time = current_time - start_time
+                remaining_time = max(0, restart_interval - elapsed_time)
+                
+                auto_restart_info = {
+                    'enabled': state.get('auto_restart', False),
+                    'restart_interval_minutes': restart_interval / 60,
+                    'elapsed_time_minutes': elapsed_time / 60,
+                    'remaining_time_minutes': remaining_time / 60,
+                    'next_restart_in': f"{remaining_time/60:.1f} minutes" if remaining_time > 0 else "Due for restart"
+                }
+            
             status[app_id] = {
                 'running': state.get('is_active', False),
                 'current_video': state.get('current_video_index', 0),
@@ -615,7 +727,8 @@ class MultiAppManager:
                 'video_path': app.video_path,
                 'model_path': app.model_path,
                 'folder_info': folder_info,
-                'folder_stats': folder_stats
+                'folder_stats': folder_stats,
+                'auto_restart': auto_restart_info
             }
         
         return status
