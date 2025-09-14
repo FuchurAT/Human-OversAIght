@@ -2,7 +2,7 @@
 
 A modular object detection application built with YOLO, featuring real-time video processing, Grad-CAM visualization, and multi-monitor support.
 
-**Part of the [Human Oversaight: The Ops Room](https://humanoversaight.cargo.site/) installation** - An interactive audio-visual installation that questions the role of human oversight of high-risk AI systems, established according to the European Artificial Intelligence Act: Article 14.
+**Part of the [Human Oversaight: The Ops Room](https://humanoversaight.cargo.site/) installation** - An interactive audio-visual installation that questions the role of human oversight of high-risk AI systems, established by the European Artificial Intelligence Act: Article 14.
 
 ## Project Context
 
@@ -14,7 +14,7 @@ This object detection application is the core technical component of **Human Ove
 - **Multi-channel video display** across LED modules in semi-arc formation
 - **Logging system** that tracks all human interactions with the AI system
 
-The installation was presented at the **Ars Electronica Festival 2025** (September 3-7, 2025) in Linz, Austria, and represents the first publicly available human-computer interface for AI oversight and stop-button functionality.
+The installation was presented at the **Ars Electronica Festival 2025** (September 3-7, 2025) in Linz, Austria, and represents a human-computer interface for AI oversight and stop-button functionality.
 
 For more information about the broader project, visit: [https://humanoversaight.cargo.site/](https://humanoversaight.cargo.site/)
 
