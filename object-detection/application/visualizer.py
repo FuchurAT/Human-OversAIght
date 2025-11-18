@@ -11,12 +11,13 @@ os.environ["AUDIODEV"] = "hw:1,0"  # Replace with your ALSA device
 import pygame
 import pygame._sdl2.audio as sdl2_audio
 from pathlib import Path
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 from config.config import (
     DEFAULT_ANIMATION_ALPHA, DEFAULT_CORNER_LENGTH, DEFAULT_EDGE_MID_LENGTH,
     DEFAULT_GLOW_THICKNESS, DEFAULT_GLOW_ALPHA, DEFAULT_CROSS_LENGTH,
     DEFAULT_CROSS_THICKNESS, DEFAULT_PIXEL_SIZE_DIVISOR, MIN_PIXEL_SIZE,
-    FPS_UPDATE_INTERVAL, FPS_Y_OFFSET, FPS_LINE_SPACING, ENABLE_AMBIENT_SOUNDS
+    FPS_UPDATE_INTERVAL, FPS_Y_OFFSET, FPS_LINE_SPACING, ENABLE_AMBIENT_SOUNDS,
+    ENABLE_AUDIO
 )
 import logging
 from application.models import Detection, DisplayConfig
@@ -38,7 +39,7 @@ def get_devices(capture_devices: bool = False) -> Tuple[str, ...]:
         pygame.mixer.quit()
     return devices
 
-def find_device_by_name(devices: Tuple[str, ...], target_name: str) -> str:
+def find_device_by_name(devices: Tuple[str, ...], target_name: str) -> Optional[str]:
     """Find a device by name, with fallback to first available device"""
     print(f"Looking for device containing: '{target_name}'")
     print(f"Available devices: {devices}")
@@ -61,16 +62,24 @@ def find_device_by_name(devices: Tuple[str, ...], target_name: str) -> str:
         return devices[0]
     else:
         logging.error("No audio devices available!")
+        return None
 
-devices = get_devices()
-
-if not devices:
-    logging.error("No device!")
-
-# Look for Rockster GO 2, USB Audio device
-device = find_device_by_name(devices, "Rockster GO 2, USB Audio")
-
-print(f"Selected audio device: {device}")
+# Only initialize audio devices if audio is enabled
+if ENABLE_AUDIO:
+    devices = get_devices()
+    
+    if not devices:
+        logging.error("No device!")
+    
+    # Look for Rockster GO 2, USB Audio device
+    device = find_device_by_name(devices, "Rockster GO 2, USB Audio")
+    
+    print(f"Selected audio device: {device}")
+else:
+    # Set a default value when audio is disabled
+    devices = tuple()
+    device = None
+    print("Audio disabled via ENABLE_AUDIO flag - skipping audio device detection")
 
 class DetectionVisualizer:
     """Handles visualization of detections and overlays"""
@@ -100,27 +109,47 @@ class DetectionVisualizer:
         self.ambient_cycle_interval = 30  # Cycle every 30 seconds
         self.ambient_sound_index = 0
         
-        # Try multiple audio initialization strategies for Bluetooth compatibility
-        self._initialize_audio_with_fallback()
-        
-        # Get the path to vocal.wav relative to the project root
-        project_root = Path(__file__).parent.parent.parent
-        self.button_sound_path = project_root / "assets" / "sounds" / "buttons"
-        self.button_sounds = list(self.button_sound_path.glob("*.wav"))
-        
-        # Initialize button sounds dictionary for easy access
-        self.button_sounds_dict = {}
-        
-        # Initialize ambient sound paths
-        self.ambient_sounds_dir = project_root / "assets" / "sounds" / "ambient"
-        
-        # Load sound files (only if audio is available)
-        if self.audio_available:
-            self._load_button_sounds()
-            self._load_ambient_sounds()
+        # Check if audio is enabled in config
+        if ENABLE_AUDIO:
+            # Try multiple audio initialization strategies for Bluetooth compatibility
+            self._initialize_audio_with_fallback()
+            
+            # Get the path to vocal.wav relative to the project root
+            project_root = Path(__file__).parent.parent.parent
+            self.button_sound_path = project_root / "assets" / "sounds" / "buttons"
+            self.button_sounds = list(self.button_sound_path.glob("*.wav"))
+            
+            # Initialize button sounds dictionary for easy access
+            self.button_sounds_dict = {}
+            
+            # Initialize ambient sound paths
+            self.ambient_sounds_dir = project_root / "assets" / "sounds" / "ambient"
+            
+            # Load sound files (only if audio is available)
+            if self.audio_available:
+                self._load_button_sounds()
+                self._load_ambient_sounds()
+        else:
+            print("Audio is disabled via ENABLE_AUDIO flag in config")
+            # Initialize paths but don't load sounds
+            project_root = Path(__file__).parent.parent.parent
+            self.button_sound_path = project_root / "assets" / "sounds" / "buttons"
+            self.button_sounds = []
+            self.button_sounds_dict = {}
+            self.ambient_sounds_dir = project_root / "assets" / "sounds" / "ambient"
     
     def _initialize_audio_with_fallback(self) -> None:
         """Try multiple audio initialization strategies for Bluetooth compatibility"""
+        if not ENABLE_AUDIO:
+            print("Audio initialization skipped - ENABLE_AUDIO is False")
+            self.audio_available = False
+            return
+        
+        if device is None:
+            print("No audio device available - skipping initialization")
+            self.audio_available = False
+            return
+        
         print("Initializing audio with Bluetooth-compatible fallback strategies...")
         
         # Strategy 1: Standard initialization
@@ -1001,6 +1030,11 @@ class DetectionVisualizer:
     
     def reinitialize_audio(self) -> bool:
         """Reinitialize pygame mixer after cleanup"""
+        if not ENABLE_AUDIO:
+            print("Audio reinitialization skipped - ENABLE_AUDIO is False")
+            self.audio_available = False
+            return False
+        
         try:
             # Check if mixer is already initialized
             if hasattr(pygame.mixer, 'get_init') and pygame.mixer.get_init():
@@ -1028,6 +1062,10 @@ class DetectionVisualizer:
     
     def _safe_audio_operation(self, operation_name: str, operation_func, *args, **kwargs):
         """Safely execute audio operations with automatic recovery"""
+        if not ENABLE_AUDIO:
+            print(f"DEBUG: Audio disabled via ENABLE_AUDIO flag, skipping {operation_name}")
+            return False
+        
         print(f"DEBUG: _safe_audio_operation called for: {operation_name}")
         print(f"DEBUG: audio_available={self.audio_available}")
         
@@ -1086,6 +1124,8 @@ class DetectionVisualizer:
     
     def is_audio_safe(self) -> bool:
         """Check if audio is safe to use"""
+        if not ENABLE_AUDIO:
+            return False
         if not self.audio_available:
             return False
         try:

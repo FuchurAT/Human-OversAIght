@@ -10,7 +10,7 @@ import sys
 import threading
 from pathlib import Path
 from typing import Dict, Optional
-from config.config import APPLICATIONS, SCREEN_CONFIG
+from config.config import APPLICATIONS, SCREEN_CONFIG, ENABLE_BUTTONS
 from application.app import VideoInferenceApp
 from application.button_handler import ButtonHandler
 import cv2
@@ -46,8 +46,12 @@ class MultiAppManager:
     def initialize_applications(self) -> bool:
         """Initialize all enabled applications from configuration"""
         try:
-            # Create shared button handler
-            self.button_handler = ButtonHandler()
+            # Create shared button handler only if buttons are enabled
+            if ENABLE_BUTTONS:
+                self.button_handler = ButtonHandler()
+            else:
+                self.button_handler = None
+                logging.info("Button handler disabled via ENABLE_BUTTONS flag")
             
             # Initialize each enabled application
             for app_id, app_config in APPLICATIONS.items():
@@ -65,12 +69,16 @@ class MultiAppManager:
                 logging.error("No applications were initialized successfully")
                 return False
             
-            # Start button handler
-            if not self.button_handler.start_serial_monitoring():
-                logging.error("Failed to start button handler")
-            else: 
-                logging.info(f"Initialized {len(self.apps)} applications successfully")
-                
+            # Start button handler only if enabled
+            if ENABLE_BUTTONS and self.button_handler:
+                if not self.button_handler.start_serial_monitoring():
+                    logging.warning("Failed to start button handler (non-critical)")
+                else: 
+                    logging.info("Button handler started successfully")
+            else:
+                logging.info("Button handler not started (disabled via ENABLE_BUTTONS flag)")
+            
+            logging.info(f"Initialized {len(self.apps)} applications successfully")
             return True
         
         except Exception as e:
@@ -122,14 +130,15 @@ class MultiAppManager:
                 screen_id=app_config['screen_id']
             )
             
-            # Set button handler
-            app.set_button_handler(self.button_handler)
-            
-            # Set multi-app manager reference for button actions
-            app._multi_app_manager = self
-            
-            # Add to button handler
-            self.button_handler.add_app_instance(app_id, app)
+            # Set button handler only if enabled
+            if self.button_handler:
+                app.set_button_handler(self.button_handler)
+                
+                # Set multi-app manager reference for button actions
+                app._multi_app_manager = self
+                
+                # Add to button handler
+                self.button_handler.add_app_instance(app_id, app)
             
             # Store application and initialize state
             self.apps[app_id] = app

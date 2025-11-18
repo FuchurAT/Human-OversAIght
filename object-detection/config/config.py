@@ -11,7 +11,9 @@ ENABLE_UNMASK = True
 ENABLE_GRAD_CAM_VIEW = True
 ENABLE_COUNTER_DISPLAY = True
 
+ENABLE_AUDIO = False  # Master flag to enable/disable all audio functionality
 ENABLE_AMBIENT_SOUNDS = False
+ENABLE_BUTTONS = False  # Master flag to enable/disable all button/serial port functionality
 
 # Multi-Application Configuration
 # Each application can have its own configuration including screen, video folders, and model
@@ -208,7 +210,7 @@ FPS_LINE_SPACING = 30
 # File Paths
 # DEFAULT_MODEL_PATH = "/home/theopsroom/App/src/cnn-detection/app/runs/train/weights/best.pt"
 # DEFAULT_VIDEO_PATH = "/home/theopsroom/human-oversaight/client/apps/object-detection/videos/"
-DEFAULT_MODEL_PATH = "/home/theopsroom/Human-OversAIght/object-detection/runs/train/weights/best.pt"
+DEFAULT_MODEL_PATH = "E:/Projects/human-oversaight/object-detection/runs/train/weights/best.pt"
 DEFAULT_VIDEO_PATH = "/home/theopsroom/Downloads/HUMAN OVERSAIGHT NEW VIDEOS"
 
 # Button-to-Keyboard Mapping Configuration

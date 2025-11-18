@@ -994,7 +994,7 @@ class VideoInferenceApp:
                 self.ndi_sender.cleanup()
             
             # Clean up button handler
-            if hasattr(self, 'button_handler'):
+            if hasattr(self, 'button_handler') and self.button_handler is not None:
                 self.button_handler.stop()
             
             logging.info("Resource cleanup completed")
@@ -1356,7 +1356,7 @@ class VideoInferenceApp:
                             if hasattr(self, 'visualizer'):
                                 self.visualizer.reinitialize_audio()
                             # Reinitialize button handler for next video
-                            if hasattr(self, 'button_handler'):
+                            if hasattr(self, 'button_handler') and self.button_handler is not None:
                                 if not self.button_handler.get_running_status():
                                     logging.info("Button handler not running, restarting...")
                                     self.button_handler.restart()
