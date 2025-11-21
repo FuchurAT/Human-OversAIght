@@ -18,6 +18,8 @@ The installation was presented at the **Ars Electronica Festival 2025** (Septemb
 
 For more information about the broader project, visit: [https://humanoversaight.cargo.site/](https://humanoversaight.cargo.site/)
 
+The project was commissioned by the Metaverse Lab, LIFT_C, JKU Linz, and received support from the State of Upper Austria as part of the LIT-Ars Electronica Funding (LITJ15502001).
+
 ## Architecture Overview
 
 ### Core Classes
