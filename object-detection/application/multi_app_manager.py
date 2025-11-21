@@ -15,6 +15,18 @@ from application.app import VideoInferenceApp
 from application.button_handler import ButtonHandler
 import cv2
 
+# Performance Settings
+PERFORMANCE_CONFIG = {
+    'enable_adaptive_frame_skipping': True,  # Skip frames when processing is slow
+    'frame_processing_threshold': 0.1,  # Skip frames if processing takes > 100ms
+    'gradcam_frame_interval': 3,  # Process GradCAM every N frames (cached frames shown between)
+    'memory_threshold_mb': 2000,  # Aggressive cleanup above this memory usage
+    'memory_warning_threshold_mb': 1500,  # Warning threshold for memory usage
+    'cleanup_interval_seconds': 300,  # Periodic cleanup interval (5 minutes)
+    'video_read_timeout_seconds': 10,  # Timeout for stuck videos
+    'enable_memory_monitoring': True,  # Enable psutil memory monitoring
+    'max_video_file_size_mb': 500,  # Warn for videos larger than this
+}
 
 class MultiAppManager:
     """
@@ -29,6 +41,19 @@ class MultiAppManager:
         self.is_running = False
         self.shutdown_event = False
         self._state_lock = threading.Lock()  # Thread safety for app states
+        
+        # Performance tracking
+        self._frame_times = {}  # Track frame processing times per app
+        self._last_cleanup_time = time.time()
+        self._cleanup_interval = PERFORMANCE_CONFIG.get('cleanup_interval_seconds', 300)
+        self._frame_drop_threshold = PERFORMANCE_CONFIG.get('frame_processing_threshold', 0.1)
+        
+        # Resource monitoring
+        self._memory_threshold_mb = PERFORMANCE_CONFIG.get('memory_threshold_mb', 2000)
+        self._memory_warning_threshold_mb = PERFORMANCE_CONFIG.get('memory_warning_threshold_mb', 1500)
+        self._high_memory_mode = False
+        self._enable_adaptive_skipping = PERFORMANCE_CONFIG.get('enable_adaptive_frame_skipping', True)
+        self._gradcam_interval = PERFORMANCE_CONFIG.get('gradcam_frame_interval', 3)
         
         # Signal handling
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -194,6 +219,8 @@ class MultiAppManager:
             # Main processing loop
             while self.is_running and not self.shutdown_event:
                 try:
+                    loop_start = time.time()
+                    
                     # Process one frame from each active application
                     active_apps = [app_id for app_id, state in self.app_states.items() if state['is_active']]
                     
@@ -203,9 +230,26 @@ class MultiAppManager:
                     
                     # Process frame from each app
                     for app_id in active_apps:
+                        frame_start = time.time()
                         if not self._process_app_frame(app_id):
                             # App finished or encountered error
                             self.app_states[app_id]['is_active'] = False
+                        
+                        # Track frame processing time
+                        frame_time = time.time() - frame_start
+                        if app_id not in self._frame_times:
+                            self._frame_times[app_id] = []
+                        self._frame_times[app_id].append(frame_time)
+                        
+                        # Keep only last 30 frame times for averaging
+                        if len(self._frame_times[app_id]) > 30:
+                            self._frame_times[app_id] = self._frame_times[app_id][-30:]
+                    
+                    # Periodic cleanup to prevent memory leaks
+                    current_time = time.time()
+                    if current_time - self._last_cleanup_time > self._cleanup_interval:
+                        self._periodic_cleanup()
+                        self._last_cleanup_time = current_time
                     
                     # Handle global key input and pass to individual apps
                     # Use proper frame rate control based on video FPS
@@ -216,7 +260,11 @@ class MultiAppManager:
                         if 'fps' in first_app_state and first_app_state['fps'] > 0:
                             wait_ms = int(1000 / first_app_state['fps'])
                     
-                    key = cv2.waitKey(wait_ms) & 0xFF
+                    # Calculate time spent processing and adjust wait time
+                    loop_time = (time.time() - loop_start) * 1000  # ms
+                    adjusted_wait = max(1, int(wait_ms - loop_time))
+                    
+                    key = cv2.waitKey(adjusted_wait) & 0xFF
                     if key == 27:  # ESC
                         logging.info("ESC pressed, shutting down")
                         break
@@ -240,9 +288,6 @@ class MultiAppManager:
                             except Exception as e:
                                 logging.warning(f"Error handling key input for app {app_id}: {e}")
                     
-                    # Small delay to prevent busy waiting
-                    time.sleep(0.01)
-                    
                 except KeyboardInterrupt:
                     logging.info("Keyboard interrupt received")
                     break
@@ -258,7 +303,7 @@ class MultiAppManager:
             return False
     
     def _initialize_app_video(self, app_id: str, app: VideoInferenceApp):
-        """Initialize video capture for a specific application"""
+        """Initialize video capture for a specific application with timeout protection"""
         try:
             state = self.app_states[app_id]
             video_files = state['video_files']
@@ -266,8 +311,9 @@ class MultiAppManager:
             current_folder_index = state['current_folder_index']
             
             if state['current_video_index'] >= len(video_files):
-                logging.info(f"App {app_id}: All videos processed")
-                state['is_active'] = False
+                logging.info(f"App {app_id}: All videos in current folder processed, moving to next")
+                # Call _next_video_or_finish to handle folder transition or looping
+                self._next_video_or_finish(app_id)
                 return
             
             # Get the current folder path
@@ -282,31 +328,72 @@ class MultiAppManager:
             
             logging.info(f"App {app_id}: Initializing video {video_file} from folder {current_folder}")
             
-            # Open video capture
-            cap = cv2.VideoCapture(str(video_path))
+            # Check file size to detect potentially problematic large files
+            try:
+                file_size = video_path.stat().st_size / (1024 * 1024)  # MB
+                if file_size > 500:  # Warn if video is larger than 500MB
+                    logging.warning(f"App {app_id}: Large video file detected ({file_size:.1f} MB), may cause performance issues")
+            except Exception as e:
+                logging.debug(f"Could not check file size: {e}")
+            
+            # Open video capture with backend specification for better reliability
+            cap = cv2.VideoCapture(str(video_path), cv2.CAP_FFMPEG)
             if not cap.isOpened():
                 logging.error(f"App {app_id}: Could not open video {video_path}")
+                # Try without backend specification
+                cap = cv2.VideoCapture(str(video_path))
+                if not cap.isOpened():
+                    logging.error(f"App {app_id}: Failed to open video with any backend")
+                    state['is_active'] = False
+                    return
+            
+            # Get video properties and validate
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            if fps <= 0 or fps > 120:
+                logging.warning(f"App {app_id}: Invalid FPS {fps}, using default 25.0")
+                fps = 25.0
+            
+            # Validate video properties
+            if width <= 0 or height <= 0:
+                logging.error(f"App {app_id}: Invalid video dimensions {width}x{height}")
+                cap.release()
                 state['is_active'] = False
                 return
             
-            # Get video properties
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            if fps <= 0:
-                fps = 25.0
+            # Test read a frame to ensure video is readable
+            test_ret, test_frame = cap.read()
+            if not test_ret or test_frame is None:
+                logging.error(f"App {app_id}: Could not read test frame from video")
+                cap.release()
+                state['is_active'] = False
+                return
+            
+            # Reset to beginning
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             
             # Setup window
             window_name = state['window_name']
             app._setup_fullscreen_window(window_name)
             
-            # Store capture
+            # Store capture and properties
             state['cap'] = cap
             state['fps'] = fps
             state['wait_ms'] = int(1000 / fps)
+            state['total_frames'] = frame_count
+            state['video_width'] = width
+            state['video_height'] = height
+            state['last_frame_time'] = time.time()
             
-            logging.info(f"App {app_id}: Video initialized successfully")
+            logging.info(f"App {app_id}: Video initialized successfully ({width}x{height} @ {fps:.1f}fps, {frame_count} frames)")
             
         except Exception as e:
             logging.error(f"Error initializing video for app {app_id}: {e}")
+            import traceback
+            logging.error(f"Traceback: {traceback.format_exc()}")
             state['is_active'] = False
     
     def _process_app_frame(self, app_id: str) -> bool:
@@ -320,11 +407,52 @@ class MultiAppManager:
             
             cap = state['cap']
             
-            # Read frame
-            ret, frame = cap.read()
-            if not ret:
+            # Check if we should skip frames based on processing time
+            avg_frame_time = 0
+            if app_id in self._frame_times and len(self._frame_times[app_id]) > 0:
+                avg_frame_time = sum(self._frame_times[app_id]) / len(self._frame_times[app_id])
+            
+            # Skip frame if processing is too slow (adaptive frame skipping)
+            if (self._enable_adaptive_skipping and avg_frame_time > self._frame_drop_threshold and 
+                state['frame_count'] % 2 == 0):
+                # Skip every other frame if processing is slow
+                ret = cap.grab()  # Just grab without decoding
+                if not ret:
+                    logging.info(f"App {app_id}: End of video reached")
+                    self._next_video_or_finish(app_id)
+                    return True
+                state['frame_count'] += 1
+                return True
+            
+            # Check for stuck video (no frame read in 10 seconds)
+            current_time = time.time()
+            if 'last_frame_time' in state:
+                time_since_last_frame = current_time - state['last_frame_time']
+                if time_since_last_frame > 10.0:
+                    logging.error(f"App {app_id}: Video appears stuck (no frame in {time_since_last_frame:.1f}s)")
+                    self._next_video_or_finish(app_id)
+                    return False
+            
+            # Read frame with timeout protection
+            try:
+                ret, frame = cap.read()
+                state['last_frame_time'] = current_time
+                
+            except Exception as e:
+                logging.error(f"App {app_id}: Error reading frame: {e}")
+                import traceback
+                logging.error(f"Traceback: {traceback.format_exc()}")
+                self._next_video_or_finish(app_id)
+                return False
+            
+            if not ret or frame is None:
                 logging.info(f"App {app_id}: End of video reached")
                 self._next_video_or_finish(app_id)
+                return True
+            
+            # Validate frame
+            if frame.size == 0 or frame.shape[0] == 0 or frame.shape[1] == 0:
+                logging.warning(f"App {app_id}: Invalid frame detected, skipping")
                 return True
             
             # Check for button next video signal
@@ -339,7 +467,6 @@ class MultiAppManager:
                     return True
                 
                 # Safety check: prevent hanging requests (timeout after 5 seconds)
-                import time
                 current_time = time.time()
                 if current_time - state.get('last_next_video_time', 0) > 5.0:
                     logging.warning(f"App {app_id}: Next video request timed out, ignoring")
@@ -363,16 +490,36 @@ class MultiAppManager:
             # Process frame
             detections, inf_time = app._process_frame(frame)
             
-            # Generate Grad-CAM if enabled
+            # Generate Grad-CAM if enabled (skip on slow frames to improve performance)
             gradcam_img = None
+            skip_gradcam = (state['frame_count'] % self._gradcam_interval != 0)
+            
             if app.display_config.gradcam_enabled and app.gradcam_processor is not None:
-                try:
-                    gradcam_img = app.gradcam_processor.process_gradcam(
-                        frame, detections, app.display_config.gradcam_in_box_only
-                    )
-                except Exception as e:
-                    logging.warning(f"App {app_id}: GradCAM processing failed: {e}")
-                    gradcam_img = frame.copy()
+                if not skip_gradcam:
+                    # Process new GradCAM
+                    try:
+                        gradcam_img = app.gradcam_processor.process_gradcam(
+                            frame, detections, app.display_config.gradcam_in_box_only
+                        )
+                    except Exception as e:
+                        logging.warning(f"App {app_id}: GradCAM processing failed: {e}")
+                        gradcam_img = frame.copy()
+                else:
+                    # Use cached GradCAM from last frame to maintain consistent view
+                    if (hasattr(app.gradcam_processor, 'last_gradcam_img') and 
+                        app.gradcam_processor.last_gradcam_img is not None):
+                        # Check if cached GradCAM matches current frame size
+                        if app.gradcam_processor.last_gradcam_img.shape == frame.shape:
+                            gradcam_img = app.gradcam_processor.last_gradcam_img
+                        else:
+                            # Size mismatch, resize cached GradCAM or use original frame
+                            try:
+                                gradcam_img = cv2.resize(app.gradcam_processor.last_gradcam_img, 
+                                                        (frame.shape[1], frame.shape[0]))
+                            except:
+                                gradcam_img = frame.copy()
+                    else:
+                        gradcam_img = frame.copy()
             else:
                 gradcam_img = frame.copy()
             
@@ -451,9 +598,22 @@ class MultiAppManager:
                         # Try the next folder
                         self._next_video_or_finish(app_id)
                 else:
-                    # All folders processed
-                    logging.info(f"App {app_id}: All folders completed")
-                    state['is_active'] = False
+                    # All folders processed - loop back to the beginning
+                    logging.info(f"App {app_id}: All folders completed, looping back to first folder")
+                    state['current_folder_index'] = 0
+                    state['current_video_index'] = 0
+                    
+                    # Initialize videos for the first folder
+                    first_folder = Path(state['video_folders'][0])
+                    first_video_files = [f for f in first_folder.iterdir() if f.suffix.lower() == '.mp4']
+                    if first_video_files:
+                        state['video_files'] = first_video_files
+                        logging.info(f"App {app_id}: Looping - Found {len(first_video_files)} videos in first folder")
+                        # Initialize the first video in the first folder
+                        self._initialize_app_video(app_id, app)
+                    else:
+                        logging.error(f"App {app_id}: No videos found in first folder when looping")
+                        state['is_active'] = False
             else:
                 # Initialize next video in current folder
                 self._initialize_app_video(app_id, app)
@@ -473,7 +633,6 @@ class MultiAppManager:
             # Use thread-safe approach with lock
             with self._state_lock:
                 if app_id in self.app_states:
-                    import time
                     current_time = time.time()
                     self.app_states[app_id]['next_video_requested'] = True
                     self.app_states[app_id]['next_video_request_count'] += 1
@@ -659,6 +818,93 @@ class MultiAppManager:
             logging.info("Shutting down multi-application system...")
             self.stop_all_apps()
             logging.info("Multi-application system shutdown complete")
+    
+    def _periodic_cleanup(self) -> None:
+        """Perform periodic cleanup to prevent memory leaks with resource monitoring"""
+        try:
+            import gc
+            import torch
+            
+            logging.info("Performing periodic memory cleanup...")
+            
+            # Get current memory usage
+            memory_mb = 0
+            try:
+                import psutil
+                process = psutil.Process()
+                mem_info = process.memory_info()
+                memory_mb = mem_info.rss / 1024 / 1024
+                logging.info(f"Memory usage: {memory_mb:.1f} MB")
+                
+                # Check if we're in high memory mode
+                if memory_mb > self._memory_threshold_mb and not self._high_memory_mode:
+                    logging.warning(f"High memory usage detected ({memory_mb:.1f} MB), entering aggressive cleanup mode")
+                    self._high_memory_mode = True
+                elif memory_mb < self._memory_warning_threshold_mb and self._high_memory_mode:
+                    logging.info(f"Memory usage normalized ({memory_mb:.1f} MB), exiting aggressive cleanup mode")
+                    self._high_memory_mode = False
+                elif memory_mb > self._memory_warning_threshold_mb:
+                    logging.warning(f"Memory usage elevated ({memory_mb:.1f} MB)")
+                
+            except ImportError:
+                logging.debug("psutil not available, skipping memory monitoring")
+            except Exception as e:
+                logging.debug(f"Error checking memory usage: {e}")
+            
+            # Force garbage collection
+            gc.collect()
+            
+            # Clear CUDA cache if available
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+                
+                # Get GPU memory stats
+                try:
+                    gpu_memory_allocated = torch.cuda.memory_allocated() / 1024 / 1024
+                    gpu_memory_reserved = torch.cuda.memory_reserved() / 1024 / 1024
+                    logging.info(f"GPU memory: {gpu_memory_allocated:.1f} MB allocated, {gpu_memory_reserved:.1f} MB reserved")
+                except Exception as e:
+                    logging.debug(f"Error getting GPU memory stats: {e}")
+            
+            # Clean up GradCAM processors
+            for app_id, app in self.apps.items():
+                if hasattr(app, 'gradcam_processor') and app.gradcam_processor:
+                    try:
+                        # Clean up temporary files
+                        if hasattr(app.gradcam_processor, 'temp_frame_path'):
+                            import os
+                            temp_path = app.gradcam_processor.temp_frame_path
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+                        
+                        # Reset buffers
+                        app.gradcam_processor.last_gradcam_img = None
+                        app.gradcam_processor.last_frame_shape = None
+                        
+                        # In high memory mode, do more aggressive cleanup
+                        if self._high_memory_mode:
+                            app.gradcam_processor.frame_buffer = None
+                            app.gradcam_processor.gradcam_buffer = None
+                            # Reinitialize buffers with smaller size if needed
+                            app.gradcam_processor._initialize_buffers()
+                            
+                    except Exception as e:
+                        logging.warning(f"Error cleaning up GradCAM for app {app_id}: {e}")
+            
+            # In high memory mode, adjust frame drop threshold
+            if self._high_memory_mode:
+                self._frame_drop_threshold = 0.05  # More aggressive frame dropping
+                logging.info("Adjusted frame drop threshold for high memory mode")
+            else:
+                self._frame_drop_threshold = 0.1  # Normal threshold
+            
+            logging.info("Periodic cleanup completed")
+            
+        except Exception as e:
+            logging.warning(f"Error during periodic cleanup: {e}")
+            import traceback
+            logging.debug(f"Cleanup traceback: {traceback.format_exc()}")
 
 
 def main():

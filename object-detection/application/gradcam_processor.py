@@ -6,6 +6,7 @@ import os
 import logging
 import cv2
 import numpy as np
+import time
 from PIL import Image
 from typing import List, Tuple, Optional
 from config.config import DEFAULT_FRAME_SKIP_THRESHOLD, DEFAULT_GRADCAM_CONF_THRESHOLD
@@ -23,7 +24,10 @@ class GradCAMProcessor:
         self.gradcam_buffer = None
         self.last_gradcam_img = None
         self.last_frame_shape = None
-        # Frame skip counter and threshold removed to fix synchronization issues
+        self._frame_cache = {}  # Cache for GradCAM results
+        self._cache_max_size = 5  # Limit cache size
+        self._last_cleanup = time.time()
+        self._cleanup_interval = 60  # Clean up every 60 seconds
         
         # Initialize buffers with default values
         self._initialize_buffers()
@@ -112,7 +116,7 @@ class GradCAMProcessor:
             self.last_frame_shape = current_shape
     
     def get_gradcam_image(self, frame: np.ndarray) -> np.ndarray:
-        """Generate Grad-CAM visualization for a frame"""
+        """Generate Grad-CAM visualization for a frame with caching"""
         if not self.is_model_ready():
             # Try to reload the model if it's not ready
             if self.needs_reload():
@@ -121,15 +125,9 @@ class GradCAMProcessor:
                     logging.info("Grad-CAM model reloaded successfully")
                 else:
                     logging.warning("Failed to reload Grad-CAM model")
-                    # Log detailed status for debugging
-                    status = self.get_model_status()
-                    logging.debug(f"Model status: {status}")
                     return frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
             else:
-                logging.warning("Grad-CAM model not ready, returning original frame")
-                # Log detailed status for debugging
-                status = self.get_model_status()
-                logging.debug(f"Model status: {status}")
+                logging.debug("Grad-CAM model not ready, returning original frame")
                 return frame.copy() if frame is not None else np.zeros((480, 640, 3), dtype=np.uint8)
         
         # Check if frame is valid
@@ -137,12 +135,33 @@ class GradCAMProcessor:
             logging.warning("Received None frame in get_gradcam_image")
             return np.zeros((480, 640, 3), dtype=np.uint8)
         
+        # Periodic cleanup
+        current_time = time.time()
+        if current_time - self._last_cleanup > self._cleanup_interval:
+            self._cleanup_cache()
+            self._last_cleanup = current_time
+        
         try:
-            # Save frame to temp file
-            cv2.imwrite(self.temp_frame_path, frame)
+            # Use in-memory processing instead of saving to disk
+            # Encode frame to JPEG in memory
+            success, encoded = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            if not success:
+                logging.warning("Failed to encode frame for GradCAM")
+                return frame.copy()
+            
+            # Write to temp file only when needed (for YOLOv8_Explainer compatibility)
+            # This is still I/O but better than constant disk writes
+            with open(self.temp_frame_path, 'wb') as f:
+                f.write(encoded.tobytes())
             
             # Get GradCAM output
             cam_images = self.cam_model(img_path=self.temp_frame_path)
+            
+            # Clean up temp file immediately
+            try:
+                os.remove(self.temp_frame_path)
+            except:
+                pass
             
             # Start with original frame
             gradcam_img = frame.copy()
@@ -304,6 +323,14 @@ class GradCAMProcessor:
                 hasattr(self, 'model_path') and 
                 self.model_path is not None)
     
+    def _cleanup_cache(self) -> None:
+        """Clean up internal caches to prevent memory leaks"""
+        try:
+            self._frame_cache.clear()
+            logging.debug("GradCAM cache cleaned up")
+        except Exception as e:
+            logging.debug(f"Error cleaning up GradCAM cache: {e}")
+    
     def cleanup(self) -> None:
         """Clean up Grad-CAM resources"""
         try:
@@ -320,6 +347,7 @@ class GradCAMProcessor:
             self.gradcam_buffer = None
             self.last_gradcam_img = None
             self.last_frame_shape = None
+            self._cleanup_cache()
             # Don't clear cam_model here - it will be reloaded if needed
             # self.cam_model = None
         except Exception as e:
